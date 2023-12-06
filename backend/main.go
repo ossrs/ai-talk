@@ -522,7 +522,7 @@ func handleTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) erro
 
 	sentence := ttsWorker.QueryTTS(rid, uuid)
 	if sentence == nil {
-		return errors.Errorf("no sentence for %v", uuid)
+		return errors.Errorf("no sentence for %v %v", rid, uuid)
 	}
 
 	fmt.Fprintf(os.Stderr, "Bot: %v\n", sentence.sentence)
@@ -530,6 +530,25 @@ func handleTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) erro
 	// Read the ttsFile and response it as opus audio.
 	w.Header().Set("Content-Type", "audio/opus")
 	http.ServeFile(w, r, sentence.ttsFile)
+
+	return nil
+}
+
+func handleRemove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	rid := r.URL.Query().Get("rid")
+	if rid == "" {
+		return errors.Errorf("empty rid")
+	}
+
+	uuid := r.URL.Query().Get("uuid")
+	if uuid == "" {
+		return errors.Errorf("empty uuid")
+	}
+
+	sentence := ttsWorker.QueryTTS(rid, uuid)
+	if sentence == nil {
+		return errors.Errorf("no sentence for %v %v", rid, uuid)
+	}
 
 	// Remove it.
 	ttsWorker.Remove(uuid)
@@ -539,6 +558,7 @@ func handleTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) erro
 	case sentence.removeSignal <- true:
 	}
 
+	ohttp.WriteData(ctx, w, r, nil)
 	return nil
 }
 
@@ -603,6 +623,13 @@ func doMain(ctx context.Context) error {
 	http.HandleFunc("/api/ai-talk/tts/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleTTS(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle tts failed, err %+v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	http.HandleFunc("/api/ai-talk/remove/", func(w http.ResponseWriter, r *http.Request) {
+		if err := handleRemove(ctx, w, r); err != nil {
+			logger.Ef(ctx, "Handle remove failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})

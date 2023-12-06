@@ -122,6 +122,18 @@ function App() {
             });
             audio.play();
           });
+
+          // Remove the AI generated audio.
+          await new Promise((resolve, reject) => {
+            fetch(`/api/ai-talk/remove/?rid=${uuid}&uuid=${readyUUID}`, {
+              method: 'POST',
+            }).then(response => {
+              return response.json();
+            }).then((data) => {
+              writeLog(`TTS: Audio removed: ${readyUUID}`);
+              resolve();
+            }).catch(error => reject(error));
+          });
         }
       } catch (e) {
         alert(e);

@@ -2,6 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	errors_std "errors"
 	"fmt"
 	"github.com/google/uuid"
@@ -11,6 +18,7 @@ import (
 	"github.com/ossrs/go-oryx-lib/logger"
 	"github.com/sashabaranov/go-openai"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
@@ -580,6 +588,13 @@ func handleRemove(ctx context.Context, w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// setEnvDefault set env key=value if not set.
+func setEnvDefault(key, value string) {
+	if os.Getenv(key) == "" {
+		os.Setenv(key, value)
+	}
+}
+
 func doMain(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -597,12 +612,15 @@ func doMain(ctx context.Context) error {
 		cancel()
 	}()
 
-	// Load env vriables from file.
-	if _, err := os.Stat("../.env"); err != nil {
-		return errors.Wrapf(err, "not found .env")
-	}
-	if err := godotenv.Overload("../.env"); err != nil {
-		return errors.Wrapf(err, "load env")
+	// Load env variables from file.
+	if _, err := os.Stat("../.env"); err == nil {
+		if err := godotenv.Overload("../.env"); err != nil {
+			return errors.Wrapf(err, "load env")
+		}
+	} else {
+		if os.Getenv("OPENAI_API_KEY") == "" {
+			return errors.Wrapf(err, "not found .env")
+		}
 	}
 
 	// Initialize OpenAI client config.
@@ -624,28 +642,29 @@ func doMain(ctx context.Context) error {
 		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), aiConfig.BaseURL)
 
 	// HTTP API handlers.
-	http.HandleFunc("/api/ai-talk/upload/", func(w http.ResponseWriter, r *http.Request) {
+	handler := http.NewServeMux()
+	handler.HandleFunc("/api/ai-talk/upload/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleAudio(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle audio failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
-	http.HandleFunc("/api/ai-talk/question/", func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc("/api/ai-talk/question/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleQuestion(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle question failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
-	http.HandleFunc("/api/ai-talk/tts/", func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc("/api/ai-talk/tts/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleTTS(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle tts failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
-	http.HandleFunc("/api/ai-talk/remove/", func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc("/api/ai-talk/remove/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleRemove(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle remove failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -656,7 +675,7 @@ func doMain(ctx context.Context) error {
 	//		/api/ai-talk/examples/example.opus
 	//		/api/ai-talk/examples/example.aac
 	//		/api/ai-talk/examples/example.mp4
-	http.HandleFunc("/api/ai-talk/examples/", func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc("/api/ai-talk/examples/", func(w http.ResponseWriter, r *http.Request) {
 		filename := r.URL.Path[len("/api/ai-talk/examples/"):]
 		if !strings.Contains(filename, ".") {
 			filename = fmt.Sprintf("%v.aac", filename)
@@ -670,6 +689,12 @@ func doMain(ctx context.Context) error {
 		http.ServeFile(w, r, path.Join(workDir, filename))
 	})
 
+	// Serve static files.
+	static := http.FileServer(http.Dir("../build"))
+	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		static.ServeHTTP(w, r)
+	})
+
 	// Setup the work dir.
 	if pwd, err := os.Getwd(); err != nil {
 		return errors.Wrapf(err, "getwd")
@@ -677,11 +702,111 @@ func doMain(ctx context.Context) error {
 		workDir = pwd
 	}
 
+	// Start HTTPS server.
+	runHttpsServer := func() error {
+		keyFile := path.Join(workDir, "../server.key")
+		crtFile := path.Join(workDir, "../server.crt")
+
+		var key, crt string
+		generateCert := func() error {
+			privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			if err != nil {
+				return errors.Wrapf(err, "generate ecdsa key")
+			}
+
+			template := x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				Subject: pkix.Name{
+					CommonName: "srs.ai.talk",
+				},
+				NotBefore: time.Now(),
+				NotAfter:  time.Now().AddDate(10, 0, 0),
+				KeyUsage:  x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+				ExtKeyUsage: []x509.ExtKeyUsage{
+					x509.ExtKeyUsageServerAuth,
+				},
+				BasicConstraintsValid: true,
+			}
+
+			derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+			if err != nil {
+				return errors.Wrapf(err, "create certificate")
+			}
+
+			privateKeyBytes, err := x509.MarshalECPrivateKey(privateKey)
+			if err != nil {
+				return errors.Wrapf(err, "marshal ecdsa key")
+			}
+
+			privateKeyBlock := pem.Block{
+				Type:  "EC PRIVATE KEY",
+				Bytes: privateKeyBytes,
+			}
+			key = string(pem.EncodeToMemory(&privateKeyBlock))
+
+			certBlock := pem.Block{
+				Type:  "CERTIFICATE",
+				Bytes: derBytes,
+			}
+			crt = string(pem.EncodeToMemory(&certBlock))
+			logger.Tf(ctx, "cert: create self-signed certificate ok, key=%vB, crt=%vB", len(key), len(crt))
+
+			return nil
+		}
+
+		if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+			if err := generateCert(); err != nil {
+				return errors.Wrapf(err, "cert: create self-signed certificate failed")
+			}
+
+			if err := os.WriteFile(keyFile, []byte(key), 0644); err != nil {
+				return errors.Wrapf(err, "cert: write key file failed")
+			}
+			if err := os.WriteFile(crtFile, []byte(crt), 0644); err != nil {
+				return errors.Wrapf(err, "cert: write crt file failed")
+			}
+		}
+
+		cert, err := tls.LoadX509KeyPair(crtFile, keyFile)
+		if err != nil {
+			return errors.Wrapf(err, "cert: ignore load cert %v, key %v failed", crtFile, keyFile)
+		}
+
+		addr := os.Getenv("HTTPS_LISTEN")
+		if !strings.HasPrefix(addr, ":") {
+			addr = fmt.Sprintf(":%v", addr)
+		}
+		logger.Tf(ctx, "HTTPS listen at %v", addr)
+
+		server := &http.Server{
+			Addr:    addr,
+			Handler: handler,
+			TLSConfig: &tls.Config{
+				GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+					return &cert, nil
+				},
+			},
+		}
+		if err := server.ListenAndServeTLS("", ""); err != nil {
+			return errors.Wrapf(err, "HTTPS Server error")
+		}
+
+		return nil
+	}
+	go func() {
+		if err := runHttpsServer(); err != nil {
+			logger.Ef(ctx, "HTTPS Server error: %+v", err)
+		}
+	}()
+
 	// Start HTTP server.
-	listen := ":3001"
+	listen := os.Getenv("HTTP_LISTEN")
+	if !strings.HasPrefix(listen, ":") {
+		listen = fmt.Sprintf(":%v", listen)
+	}
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("Listen at %v, workDir=%v\n", listen, workDir))
 	logger.Tf(ctx, "Listen at %v", listen)
-	server := &http.Server{Addr: listen, Handler: nil}
+	server := &http.Server{Addr: listen, Handler: handler}
 
 	go func() {
 		<-ctx.Done()
@@ -697,6 +822,10 @@ func doMain(ctx context.Context) error {
 
 func main() {
 	ctx := context.Background()
+
+	setEnvDefault("HTTP_LISTEN", "3001")
+	setEnvDefault("HTTPS_LISTEN", "3443")
+
 	if err := doMain(ctx); err != nil {
 		logger.Ef(ctx, "Main error: %+v", err)
 		os.Exit(-1)

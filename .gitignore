@@ -30,3 +30,4 @@ server.crt
 *.audio
 *.opus
 *.m4a
+/backend/server

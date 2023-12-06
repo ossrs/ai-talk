@@ -207,6 +207,28 @@ function App() {
     setStarted(true);
   }, [writeLongLog, writeShortLog, setStarted, audioPlayerRef]);
 
+  React.useEffect(() => {
+    if (!started) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key !== 'r' && e.key !== '\\') return;
+      startRecording();
+    };
+    const handleKeyUp = (e) => {
+      if (e.key !== 'r' && e.key !== '\\') return;
+      setTimeout(() => {
+        stopRecording();
+      }, 800);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [started]);
+
   return (<div className="App">
     <header className="App-header">
       {!started && <button className='StartButton' onClick={(e) => {
@@ -217,16 +239,6 @@ function App() {
           startRecording();
         }}
         onTouchEnd={(e) => {
-          setTimeout(() => {
-            stopRecording();
-          }, 800);
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== 'r' && e.key !== '\\') return;
-          startRecording();
-        }}
-        onKeyUp={(e) => {
-          if (e.key !== 'r' && e.key !== '\\') return;
           setTimeout(() => {
             stopRecording();
           }, 800);

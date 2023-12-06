@@ -42,11 +42,6 @@ TAG="v$VERSION" &&
 echo "publish version $VERSION as tag $TAG"
 if [[ $? -ne 0 ]]; then echo "Release failed"; exit 1; fi
 
-if [[ $(grep -q "const version = \"$VERSION\"" main.go || echo no) == no ]]; then
-  echo "Failed: Please update version in main.go";
-  exit 1
-fi
-
 git st |grep -q 'nothing to commit'
 if [[ $? -ne 0 ]]; then
   echo "Failed: Please commit before release";

@@ -51,6 +51,7 @@ jobs:
         run: |
           echo "Release ossrs/ai-talk:$SRS_TAG"
           docker build -t ossrs/ai-talk:$SRS_TAG -f Dockerfile .
+          docker push ossrs/ai-talk:$SRS_TAG
       - name: Docker alias images for ossrs/ai-talk
         uses: akhilerm/tag-push-action@v2.1.0
         with:

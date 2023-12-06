@@ -37,5 +37,5 @@ COPY --from=ui /g/build /g/build
 
 ENV HTTP_LISTEN=3000
 
-WORKDIR /g
-CMD ["./backend/server"]
+WORKDIR /g/backend
+CMD ["./server"]

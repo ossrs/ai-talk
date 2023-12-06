@@ -65,4 +65,4 @@ echo "Publish OK: $TAG"
 
 echo -e "\n\n"
 echo "Publish OK: $TAG $PLATFORM_TAG"
-echo "    https://github.com/ossrs/ai-talk/actions/workflows/tcui.yml"
+echo "    https://github.com/winlinvip/ai-talk/actions/workflows/release.yml"

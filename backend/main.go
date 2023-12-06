@@ -48,7 +48,7 @@ const AI_MODEL = openai.GPT4TurboPreview
 
 // Disable padding by set env AI_NO_PADDING=1.
 const FirstSentencePaddingLength = 8
-const FirstSentencePaddingText = "我说的是："
+const FirstSentencePaddingText = "我的回答是："
 
 // You can overwrite it by env AI_MAX_TOKENS.
 const AI_MAX_TOKENS = 1024

@@ -26,3 +26,7 @@ yarn-error.log*
 .env
 server.key
 server.crt
+*.aac
+*.audio
+*.opus
+*.m4a

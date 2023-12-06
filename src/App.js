@@ -251,6 +251,11 @@ function App() {
       <button onClick={(e) => {
         setShowShortLogs(!showShortLogs);
       }}>{showShortLogs ? 'Detail Logs' : 'Short Logs'}</button> &nbsp;
+      <button onClick={(e) => {
+        const audio = new Audio("/api/ai-talk/examples/example.aac");
+        audio.loop = false;
+        audio.play();
+      }}>Example aac</button> &nbsp;
     </p>
     <ul className='LogPanel'>
       {!showShortLogs && longLogRenders.map((log, index) => {

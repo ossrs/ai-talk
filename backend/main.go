@@ -108,15 +108,31 @@ func (v *TTSWorker) QueryTTS(requestUUID, uuid string) *TTSStencense {
 
 func (v *TTSWorker) QueryReady(ctx context.Context, requestUUID string) *TTSStencense {
 	for ctx.Err() == nil {
-		if s := v.Query(requestUUID); s == nil {
+		var s *TTSStencense
+
+		// When there is no stencense, maybe AI is generating the sentence, we need to wait. For example,
+		// if the first sentence is very short, maybe we got it quickly, but the second sentence is very
+		// long so that the AI need more time to generate it.
+		for i := 0; i < 10 && s == nil; i++ {
+			if s = v.Query(requestUUID); s == nil {
+				select {
+				case <-ctx.Done():
+				case <-time.After(200 * time.Millisecond):
+				}
+			}
+		}
+
+		if s == nil {
 			return nil
-		} else if !s.dummy && (s.ready || s.err != nil) {
+		}
+
+		if !s.dummy && (s.ready || s.err != nil) {
 			return s
 		}
 
 		select {
 		case <-ctx.Done():
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(300 * time.Millisecond):
 		}
 	}
 
@@ -502,7 +518,7 @@ func handleQuestion(ctx context.Context, w http.ResponseWriter, r *http.Request)
 		UUID       string `json:"uuid"`
 		TTS        string `json:"tts"`
 	}{
-		Processing: sentence.dummy || !sentence.ready,
+		Processing: sentence.dummy || (!sentence.ready && sentence.err == nil),
 		UUID:       sentence.uuid,
 		TTS:        sentence.sentence,
 	})
@@ -524,8 +540,8 @@ func handleTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) erro
 	if sentence == nil {
 		return errors.Errorf("no sentence for %v %v", rid, uuid)
 	}
-	logger.Tf(ctx, "Query sentence %v %v, dummy=%v, sentence=%v",
-		rid, uuid, sentence.dummy, sentence.sentence)
+	logger.Tf(ctx, "Query sentence %v %v, dummy=%v, sentence=%v, err=%v",
+		rid, uuid, sentence.dummy, sentence.sentence, sentence.err)
 
 	fmt.Fprintf(os.Stderr, "Bot: %v\n", sentence.sentence)
 

@@ -1,17 +1,38 @@
 import React from 'react';
 import './App.css';
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  function handleWindowSizeChange() {
+    setIsMobile(window.innerWidth <= 768);
+  }
+  React.useEffect(() => {
+    window.addEventListener('resize', handleWindowSizeChange);
+    return () => {
+      window.removeEventListener('resize', handleWindowSizeChange);
+    }
+  }, [setIsMobile]);
+
+  return isMobile;
+}
+
 function App() {
   const [btnClassName, setBtnClassName] = React.useState('StaticButton');
   const [loading, setLoading] = React.useState(false);
   const mediaRecorderRef = React.useRef(null);
   const audioChunkRef = React.useRef([]);
-  const [logRenders, setLogRenders] = React.useState([]);
-  const logs = React.useRef([]);
   const [started, setStarted] = React.useState(false);
   const audioPlayerRef = React.useRef(null);
+  const isMobile = useIsMobile();
 
-  const writeLog = React.useCallback((msg) => {
+  const [showShortLogs, setShowShortLogs] = React.useState(true);
+  const [longLogRenders, setLongLogRenders] = React.useState([]);
+  const longLogs = React.useRef([]);
+  const [shortLogRenders, setShortLogRenders] = React.useState([]);
+  const shortLogs = React.useRef([]);
+
+  const writeShortLog = React.useCallback((msg) => {
     const date = new Date();
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
@@ -20,19 +41,33 @@ function App() {
     const log = `[${hours}:${minutes}:${seconds}]: ${msg}`;
     console.log(log);
 
-    logs.current = [log, ...logs.current];
-    setLogRenders(logs.current);
-  }, [logs, setLogRenders]);
+    shortLogs.current = [log, ...shortLogs.current];
+    setShortLogRenders(shortLogs.current);
+  }, [shortLogs, setShortLogRenders]);
+
+  const writeLongLog = React.useCallback((msg) => {
+    const date = new Date();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+
+    const log = `[${hours}:${minutes}:${seconds}]: ${msg}`;
+    console.log(log);
+
+    longLogs.current = [log, ...longLogs.current];
+    setLongLogRenders(longLogs.current);
+  }, [longLogs, setLongLogRenders]);
 
   React.useEffect(() => {
-    writeLog('App started');
-  }, [writeLog]);
+    writeLongLog('App started');
+  }, [writeLongLog]);
 
   const startRecording = React.useCallback(() => {
     if (mediaRecorderRef.current) return;
 
     setBtnClassName('DynamicButton');
-    writeLog("===========================");
+    writeLongLog("===========================");
+    writeShortLog("===========================");
 
     navigator.mediaDevices.getUserMedia(
       { audio: true }
@@ -41,25 +76,25 @@ function App() {
       mediaRecorderRef.current = new MediaRecorder(stream);
       mediaRecorderRef.current.addEventListener("dataavailable", ({ data }) => {
         audioChunkRef.current.push(data);
-        writeLog(`Event: dataavailable ${data.size} bytes`);
+        writeLongLog(`Event: dataavailable ${data.size} bytes`);
       });
       mediaRecorderRef.current.start();
-      writeLog(`Event: Recording started`);
+      writeLongLog(`Event: Recording started`);
     }).catch(error => alert(error));
-  }, [writeLog]);
+  }, [writeLongLog]);
 
   const stopRecording = React.useCallback(() => {
     if (!mediaRecorderRef.current) return;
 
     mediaRecorderRef.current.addEventListener("stop", async () => {
-      writeLog(`Event: stopping, ${audioChunkRef.current.length} chunks`);
+      writeLongLog(`Event: stopping, ${audioChunkRef.current.length} chunks`);
 
       setLoading(true);
 
       try {
         // Upload the user input audio to the server.
         const uuid = await new Promise((resolve, reject) => {
-          writeLog(`ASR: Uploading ${audioChunkRef.current.length} chunks`);
+          writeLongLog(`ASR: Uploading ${audioChunkRef.current.length} chunks`);
           const audioBlob = new Blob(audioChunkRef.current);
           audioChunkRef.current = [];
 
@@ -73,14 +108,15 @@ function App() {
           }).then(response => {
             return response.json();
           }).then((data) => {
-            writeLog(`ASR: Upload success: ${data.data.uuid} ${data.data.asr}`);
+            writeLongLog(`ASR: Upload success: ${data.data.uuid} ${data.data.asr}`);
+            writeShortLog(`You: ${data.data.asr}`);
             resolve(data.data.uuid);
           }).catch((error) => reject(error));
         });
 
         // Get the AI generated audio from the server.
         while (true) {
-          writeLog(`TTS: Requesting ${uuid} response audios`);
+          writeLongLog(`TTS: Requesting ${uuid} response audios`);
           let readyUUID = null;
           while (!readyUUID) {
             const resp = await new Promise((resolve, reject) => {
@@ -89,7 +125,10 @@ function App() {
               }).then(response => {
                 return response.json();
               }).then((data) => {
-                if (data?.data?.uuid) writeLog(`TTS: Audio ready: ${data.data.uuid} ${data.data.tts}`);
+                if (data?.data?.uuid) {
+                  writeLongLog(`TTS: Audio ready: ${data.data.uuid} ${data.data.tts}`);
+                  writeShortLog(`Bot: ${data.data.tts}`);
+                }
                 resolve(data.data);
               }).catch(error => reject(error));
             });
@@ -108,26 +147,26 @@ function App() {
 
           // All audios are played.
           if (!readyUUID) {
-            writeLog(`TTS: All audios are played.`);
-            writeLog("===========================");
+            writeLongLog(`TTS: All audios are played.`);
+            writeLongLog("===========================");
             break;
           }
 
           // Play the AI generated audio.
           await new Promise(resolve => {
             const url = `/api/ai-talk/tts/?rid=${uuid}&uuid=${readyUUID}`;
-            writeLog(`TTS: Playing ${url}`);
+            writeLongLog(`TTS: Playing ${url}`);
 
             const listener = () => {
               audioPlayerRef.current.removeEventListener('ended', listener);
-              writeLog(`TTS: Played ${url} done.`);
+              writeLongLog(`TTS: Played ${url} done.`);
               resolve();
             };
             audioPlayerRef.current.addEventListener('ended', listener);
 
             audioPlayerRef.current.src = url;
             audioPlayerRef.current.play().catch(error => {
-              writeLog(`TTS: Play ${url} failed: ${error}`);
+              writeLongLog(`TTS: Play ${url} failed: ${error}`);
               resolve();
             });
           });
@@ -139,7 +178,7 @@ function App() {
             }).then(response => {
               return response.json();
             }).then((data) => {
-              writeLog(`TTS: Audio removed: ${readyUUID}`);
+              writeLongLog(`TTS: Audio removed: ${readyUUID}`);
               resolve();
             }).catch(error => reject(error));
           });
@@ -152,19 +191,26 @@ function App() {
       }
     });
 
-    writeLog(`Event: stop, ${audioChunkRef.current.length} chunks`);
+    writeLongLog(`Event: stop, ${audioChunkRef.current.length} chunks`);
     mediaRecorderRef.current.stop();
     mediaRecorderRef.current = null;
-  }, [writeLog]);
+  }, [writeLongLog]);
+
+  const onStart = React.useCallback(() => {
+    writeLongLog("Start the app");
+    writeShortLog("Start the app");
+
+    const audio = new Audio("/api/ai-talk/examples/silent.aac");
+    audio.loop = false;
+    audio.play();
+    audioPlayerRef.current = audio;
+    setStarted(true);
+  }, [writeLongLog, writeShortLog, setStarted, audioPlayerRef]);
 
   return (<div className="App">
     <header className="App-header">
       {!started && <button className='StartButton' onClick={(e) => {
-        const audio = new Audio("/api/ai-talk/examples/silent.aac");
-        audio.loop = false;
-        audio.play();
-        audioPlayerRef.current = audio;
-        setStarted(true);
+        onStart();
       }}>Click to start</button>}
       {started && <button
         onTouchStart={(e) => {
@@ -187,33 +233,21 @@ function App() {
         }}
         className={btnClassName}
         disabled={loading}
-      >Press to talk</button>}
+      >{isMobile ? 'Press to talk' : 'Press the R key to talk'}</button>}
     </header>
+    <p>
+      <button onClick={(e) => {
+        setShowShortLogs(!showShortLogs);
+      }}>{showShortLogs ? 'Detail Logs' : 'Short Logs'}</button> &nbsp;
+    </p>
     <ul className='LogPanel'>
-      {logRenders.map((log, index) => {
+      {!showShortLogs && longLogRenders.map((log, index) => {
+        return (<li key={index}>{log}</li>);
+      })}
+      {showShortLogs && shortLogRenders.map((log, index) => {
         return (<li key={index}>{log}</li>);
       })}
     </ul>
-    <button onClick={(e) => {
-      const audio = new Audio("/api/ai-talk/examples/example");
-      audio.loop = false;
-      audio.play();
-    }}>Example</button> &nbsp;
-    <button onClick={(e) => {
-      const audio = new Audio("/api/ai-talk/examples/example.aac");
-      audio.loop = false;
-      audio.play();
-    }}>Example aac</button> &nbsp;
-    <button onClick={(e) => {
-      const audio = new Audio("/api/ai-talk/examples/example.opus");
-      audio.loop = false;
-      audio.play();
-    }}>Example opus</button> &nbsp;
-    <button onClick={(e) => {
-      const audio = new Audio("/api/ai-talk/examples/example.mp3");
-      audio.loop = false;
-      audio.play();
-    }}>Example mp3</button> &nbsp;
   </div>);
 }
 

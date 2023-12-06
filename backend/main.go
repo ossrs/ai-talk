@@ -173,7 +173,7 @@ func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 				Model:          openai.TTSModel1,
 				Input:          s.sentence,
 				Voice:          openai.VoiceNova,
-				ResponseFormat: openai.SpeechResponseFormatOpus,
+				ResponseFormat: openai.SpeechResponseFormatAac,
 			})
 			if err != nil {
 				return errors.Wrapf(err, "create speech")
@@ -301,7 +301,7 @@ func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletion
 				sentence:     sentence,
 				removeSignal: make(chan bool, 1),
 			}
-			s.ttsFile = path.Join(workDir, fmt.Sprintf("%v-sentence-%v-tts.opus", rid, s.uuid))
+			s.ttsFile = path.Join(workDir, fmt.Sprintf("%v-sentence-%v-tts.aac", rid, s.uuid))
 			sentence = ""
 
 			ttsWorker.Add(ctx, s)
@@ -528,7 +528,7 @@ func handleTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) erro
 	fmt.Fprintf(os.Stderr, "Bot: %v\n", sentence.sentence)
 
 	// Read the ttsFile and response it as opus audio.
-	w.Header().Set("Content-Type", "audio/opus")
+	w.Header().Set("Content-Type", "audio/aac")
 	http.ServeFile(w, r, sentence.ttsFile)
 
 	return nil
@@ -632,6 +632,24 @@ func doMain(ctx context.Context) error {
 			logger.Ef(ctx, "Handle remove failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	})
+
+	// You can access:
+	//		/api/ai-talk/examples/example.opus
+	//		/api/ai-talk/examples/example.aac
+	//		/api/ai-talk/examples/example.mp4
+	http.HandleFunc("/api/ai-talk/examples/", func(w http.ResponseWriter, r *http.Request) {
+		filename := r.URL.Path[len("/api/ai-talk/examples/"):]
+		if !strings.Contains(filename, ".") {
+			filename = fmt.Sprintf("%v.aac", filename)
+		}
+		
+		ext := strings.Trim(path.Ext(filename), ".")
+		contentType := fmt.Sprintf("audio/%v", ext)
+		logger.Tf(ctx, "Serve example file=%v, ext=%v, contentType=%v", filename, ext, contentType)
+
+		w.Header().Set("Content-Type", contentType)
+		http.ServeFile(w, r, path.Join(workDir, filename))
 	})
 
 	// Setup the work dir.

@@ -107,6 +107,7 @@ function App() {
           // All audios are played.
           if (!readyUUID) {
             writeLog(`TTS: All audios are played.`);
+            writeLog("===========================");
             break;
           }
 
@@ -178,6 +179,26 @@ function App() {
         return (<li key={index}>{log}</li>);
       })}
     </ul>
+    <button onClick={(e) => {
+      const audio = new Audio("/api/ai-talk/examples/example");
+      audio.loop = false;
+      audio.play();
+    }}>Example</button> &nbsp;
+    <button onClick={(e) => {
+      const audio = new Audio("/api/ai-talk/examples/example.aac");
+      audio.loop = false;
+      audio.play();
+    }}>Example aac</button> &nbsp;
+    <button onClick={(e) => {
+      const audio = new Audio("/api/ai-talk/examples/example.opus");
+      audio.loop = false;
+      audio.play();
+    }}>Example opus</button> &nbsp;
+    <button onClick={(e) => {
+      const audio = new Audio("/api/ai-talk/examples/example.mp3");
+      audio.loop = false;
+      audio.play();
+    }}>Example mp3</button> &nbsp;
   </div>);
 }
 

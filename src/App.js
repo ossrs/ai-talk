@@ -3,23 +3,33 @@ import './App.css';
 
 function App() {
   const [btnClassName, setBtnClassName] = React.useState('StaticButton');
+  const [loading, setLoading] = React.useState(false);
+  const mediaRecorderRef = React.useRef(null);
+  const audioChunkRef = React.useRef([]);
+  const [logRenders, setLogRenders] = React.useState([]);
+  const logs = React.useRef([]);
 
-  const [userLog, setUserLog] = React.useState();
   const writeLog = React.useCallback((msg) => {
     const date = new Date();
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
     const seconds = date.getSeconds().toString().padStart(2, '0');
 
-    setUserLog(`[${hours}:${minutes}:${seconds}]: ${msg}`);
-    console.log(`[${hours}:${minutes}:${seconds}]: ${msg}`);
-  }, [setUserLog]);
+    const log = `[${hours}:${minutes}:${seconds}]: ${msg}`;
+    console.log(log);
 
-  const mediaRecorderRef = React.useRef(null);
-  const audioChunkRef = React.useRef([]);
+    logs.current = [log, ...logs.current];
+    setLogRenders(logs.current);
+  }, [logs, setLogRenders]);
+
+  React.useEffect(() => {
+    writeLog('App started');
+  }, [writeLog]);
 
   const startRecording = React.useCallback(() => {
     if (mediaRecorderRef.current) return;
+
+    setBtnClassName('DynamicButton');
 
     navigator.mediaDevices.getUserMedia(
       { audio: true }
@@ -41,17 +51,24 @@ function App() {
     mediaRecorderRef.current.addEventListener("stop", () => {
       writeLog(`Event: stopping, ${audioChunkRef.current.length} chunks`);
 
+      setLoading(true);
+      writeLog(`Uploading ${audioChunkRef.current.length} chunks`);
+
       const audioBlob = new Blob(audioChunkRef.current);
       const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.aac');
-      fetch('/api/gpt-microphone/upload/', {
+      // It can be aac or ogg codec.
+      formData.append('file', audioBlob, 'input.audio');
+      fetch('/api/ai-talk/upload/', {
         method: 'POST',
         body: formData,
       }).then(response => {
-        return response.text();
+        return response.json();
       }).then((data) => {
-        console.log(`Upload success: ${data}`);
-      }).catch(error => alert(error));
+        writeLog(`Upload success: ${JSON.stringify(data)}`);
+      }).catch(error => alert(error)).finally(() => {
+        setLoading(false);
+        setBtnClassName('StaticButton');
+      });
 
       audioChunkRef.current = [];
       writeLog(`Event: Recording stopped`);
@@ -66,31 +83,32 @@ function App() {
     <header className="App-header">
       <button
         onTouchStart={(e) => {
-          setBtnClassName('DynamicButton');
-          writeLog(`Event: onTouchStart`);
           startRecording();
         }}
         onTouchEnd={(e) => {
-          setBtnClassName('StaticButton');
-          writeLog(`Event: onTouchEnd`);
-          stopRecording();
+          setTimeout(() => {
+            stopRecording();
+          }, 800);
         }}
         onKeyDown={(e) => {
           if (e.key !== 'r' && e.key !== '\\') return;
-          setBtnClassName('DynamicButton');
-          writeLog(`Event: onKeyDown ${e.key}`);
           startRecording();
         }}
         onKeyUp={(e) => {
           if (e.key !== 'r' && e.key !== '\\') return;
-          setBtnClassName('StaticButton');
-          writeLog(`Event: onKeyUp ${e.key}`);
-          stopRecording();
+          setTimeout(() => {
+            stopRecording();
+          }, 800);
         }}
         className={btnClassName}
+        disabled={loading}
       ></button>
-      <p>{userLog}</p>
     </header>
+    <ul className='LogPanel'>
+      {logRenders.map((log, index) => {
+        return (<li key={index}>{log}</li>);
+      })}
+    </ul>
   </div>);
 }
 

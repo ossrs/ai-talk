@@ -4,18 +4,21 @@ import (
 	"context"
 	errors2 "errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/ossrs/go-oryx-lib/errors"
+	ohttp "github.com/ossrs/go-oryx-lib/http"
 	"github.com/ossrs/go-oryx-lib/logger"
-	openai "github.com/sashabaranov/go-openai"
+	"github.com/sashabaranov/go-openai"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 var previousAsrText string
@@ -44,6 +47,8 @@ const AI_MODEL = openai.GPT4TurboPreview
 var ttsWorker TTSWorker
 
 type TTSStencense struct {
+	rid      string
+	uuid     string
 	sentence string
 	ttsFile  string
 	ready    bool
@@ -102,15 +107,11 @@ func (v *TTSWorker) Run(ctx context.Context) {
 	}()
 }
 
-func (v *TTSWorker) Add(ctx context.Context, sentence string) {
+func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
-	s := TTSStencense{
-		sentence: sentence,
-		ttsFile:  fmt.Sprintf("/tmp/tts-%v-%v-%v.opus", os.Getpid(), time.Now().UnixNano(), rand.Int()),
-	}
-	v.sentences = append(v.sentences, &s)
+	v.sentences = append(v.sentences, s)
 
 	go func() {
 		if err := func() error {
@@ -123,7 +124,7 @@ func (v *TTSWorker) Add(ctx context.Context, sentence string) {
 			client := openai.NewClientWithConfig(config)
 			resp, err := client.CreateSpeech(ctx, openai.CreateSpeechRequest{
 				Model:          openai.TTSModel1,
-				Input:          sentence,
+				Input:          s.sentence,
 				Voice:          openai.VoiceNova,
 				ResponseFormat: openai.SpeechResponseFormatOpus,
 			})
@@ -152,9 +153,10 @@ func (v *TTSWorker) Add(ctx context.Context, sentence string) {
 	}()
 }
 
-func handleStream(ctx context.Context, stream *openai.ChatCompletionStream) error {
+func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletionStream) error {
 	var sentence string
 	var finished bool
+	firstSentense := true
 	for !finished && ctx.Err() == nil {
 		response, err := stream.Recv()
 		finished = errors2.Is(err, io.EOF)
@@ -162,33 +164,75 @@ func handleStream(ctx context.Context, stream *openai.ChatCompletionStream) erro
 			return errors.Wrapf(err, "recv chat")
 		}
 
-		var dc string
+		newSentence := false
 		if len(response.Choices) > 0 {
 			choice := response.Choices[0]
-			dc = choice.Delta.Content
+			if dc := choice.Delta.Content; dc != "" {
+				filteredStencese := strings.ReplaceAll(dc, "\n\n", "\n")
+				filteredStencese = strings.ReplaceAll(filteredStencese, "\n", " ")
+				sentence += filteredStencese
+
+				// Any ASCII character to split sentence.
+				if strings.ContainsAny(dc, ",.?!\n") {
+					newSentence = true
+				}
+
+				// Any Chinese character to split sentence.
+				if strings.ContainsRune(dc, '。') ||
+					strings.ContainsRune(dc, '？') ||
+					strings.ContainsRune(dc, '！') {
+					newSentence = true
+				}
+			}
 		}
 
-		newSentence := false
-		if dc != "" {
-			filteredStencese := strings.ReplaceAll(dc, "\n\n", "\n")
-			filteredStencese = strings.ReplaceAll(filteredStencese, "\n", " ")
-			sentence += filteredStencese
+		if sentence == "" {
+			continue
+		}
 
-			if dc == "," || dc == "." || dc == "?" || dc == "!" || strings.Contains(dc, "\n") {
-				newSentence = true
+		isEnglish := func(s string) bool {
+			for _, r := range s {
+				if r > unicode.MaxASCII {
+					return false
+				}
 			}
-			if dc == "。" || dc == "？" || dc == "！" {
+			return true
+		}
+
+		// Determine whether new sentence by length.
+		if isEnglish(sentence) {
+			if nn := strings.Count(sentence, " "); nn >= 10 {
 				newSentence = true
+			} else if nn < 3 {
+				newSentence = false
 			}
-			if len(sentence) <= 3 || sentence == "" {
+		} else {
+			if nn := utf8.RuneCount([]byte(sentence)); nn >= 50 {
+				newSentence = true
+			} else if nn < 3 {
 				newSentence = false
 			}
 		}
 
-		if sentence != "" && (finished || newSentence) {
+		if finished || newSentence {
 			previousAssitant += sentence + " "
-			ttsWorker.Add(ctx, sentence)
+
+			if firstSentense {
+				firstSentense = false
+				if !isEnglish(sentence) && utf8.RuneCount([]byte(sentence)) < 8 {
+					sentence = fmt.Sprintf("我说的是：%v", sentence)
+				}
+			}
+
+			s := &TTSStencense{
+				rid:      rid,
+				uuid:     uuid.NewString(),
+				sentence: sentence,
+			}
+			s.ttsFile = fmt.Sprintf("/tmp/%v-sentence-%v-tts.opus", rid, s.uuid)
 			sentence = ""
+
+			ttsWorker.Add(ctx, s)
 		}
 	}
 
@@ -198,7 +242,12 @@ func handleStream(ctx context.Context, stream *openai.ChatCompletionStream) erro
 func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	ctx = logger.WithContext(ctx)
 
-	inputFile := fmt.Sprintf("/tmp/audio-%v-%v-%v.aac", os.Getpid(), time.Now().UnixNano(), rand.Int())
+	// For this request.
+	rid := uuid.NewString()
+
+	// We save the input audio to *.audio file, it can be aac or opus codec.
+	inputFile := fmt.Sprintf("/tmp/%v-input.audio", rid)
+	defer os.Remove(inputFile)
 	if err := func() error {
 		r.ParseMultipartForm(20 * 1024 * 1024)
 		file, _, err := r.FormFile("file")
@@ -223,20 +272,20 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	}(); err != nil {
 		return errors.Wrapf(err, "copy %v", inputFile)
 	}
-	defer os.Remove(inputFile)
 
-	// aac to m4a
-	// opus to ogg
-	outputFile := fmt.Sprintf("/tmp/audio-%v-%v-%v.m4a", os.Getpid(), time.Now().UnixNano(), rand.Int())
+	outputFile := fmt.Sprintf("/tmp/%v-input.m4a", rid)
+	defer os.Remove(outputFile)
 	if true {
 		err := exec.CommandContext(ctx, "ffmpeg",
-			"-i", inputFile, "-c", "copy", "-y", outputFile,
+			"-i", inputFile,
+			"-vn", "-c:a", "aac", "-ac", "1", "-ar", "16000", "-ab", "30k",
+			outputFile,
 		).Run()
+
 		if err != nil {
 			return errors.Errorf("Error converting the file")
 		}
 		logger.Tf(ctx, "Convert to ogg %v ok", outputFile)
-		defer os.Remove(outputFile)
 	}
 
 	var config openai.ClientConfig
@@ -299,33 +348,21 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return errors.Wrapf(err, "create chat")
 	}
-	defer stream.Close()
 
-	if err := handleStream(ctx, stream); err != nil {
-		return errors.Wrapf(err, "handle stream")
-	}
-
-	// Wait for sentences to be consumed.
-	consumed, cancel := context.WithCancel(ctx)
-
+	// Never wait for any response.
 	go func() {
-		for ctx.Err() == nil {
-			if len(ttsWorker.sentences) == 0 {
-				logger.Tf(ctx, "All sentences consumed")
-				cancel()
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
+		defer stream.Close()
+		if err := handleStream(ctx, rid, stream); err != nil {
+			logger.Ef(ctx, "Handle stream failed, err %+v", err)
 		}
 	}()
 
-	select {
-	case <-ctx.Done():
-	case <-consumed.Done():
-	}
-
-	// OK, process next message.
-	w.Write([]byte(asrText))
+	// Response the request UUID and pulling the response.
+	ohttp.WriteData(ctx, w, r, struct {
+		UUID string `json:"uuid"`
+	}{
+		UUID: rid,
+	})
 	return nil
 }
 
@@ -334,7 +371,7 @@ func doMain(ctx context.Context) error {
 		return errors.Wrapf(err, "load env")
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/ai-talk/upload/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleAudio(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle audio failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -345,6 +382,7 @@ func doMain(ctx context.Context) error {
 	ttsWorker.Run(ctx)
 
 	listen := ":3001"
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("Listen at %v\n", listen))
 	logger.Tf(ctx, "Listen at %v", listen)
 	return http.ListenAndServe(listen, nil)
 }

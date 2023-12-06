@@ -20,6 +20,8 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -33,36 +35,8 @@ import (
 	"unicode/utf8"
 )
 
-// You can overwrite it by env AI_SYSTEM_PROMPT.
-const AI_SYSTEM_PROMPT = `
-我希望你是一个儿童的词语接龙的助手。
-我希望你做两个词的词语接龙。
-我希望你不要用重复的词语。
-我希望你回答比较简短，不超过50字。
-我希望你重复我说的词，然后再接龙。
-我希望你回答时，解释下词语的含义。
-请记住，你讲的答案是给6岁小孩听得懂的。
-请记住，你要做词语接龙。
-
-例如：
-我：苹果
-你：苹果，果园
-苹果，是一种水果，长在树上，是红色的。
-果园，是一种地方，有很多树，有很多果子。
-`
-
-// You can overwrite it by env AI_MODEL.
-const AI_MODEL = openai.GPT4TurboPreview
-
-// Disable padding by set env AI_NO_PADDING=1.
+// Disable padding by set env AI_NO_PADDING=true.
 const FirstSentencePaddingLength = 8
-const FirstSentencePaddingText = "我的回答是："
-
-// You can overwrite it by env AI_MAX_TOKENS.
-const AI_MAX_TOKENS = 1024
-
-// You can overwrite it by env AI_TEMPERATURE.
-const AI_TEMPERATURE = 0.9
 
 var ttsWorker TTSWorker
 var previousAsrText string
@@ -312,10 +286,10 @@ func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletion
 
 			if firstSentense {
 				firstSentense = false
-				if os.Getenv("AI_NO_PADDING") != "1" &&
+				if os.Getenv("AI_NO_PADDING") != "true" &&
 					!isEnglish(sentence) &&
 					utf8.RuneCount([]byte(sentence)) < FirstSentencePaddingLength {
-					sentence = fmt.Sprintf("%v%v", FirstSentencePaddingText, sentence)
+					sentence = fmt.Sprintf("%v%v", os.Getenv("AI_PADDING_TEXT"), sentence)
 				}
 			}
 
@@ -425,10 +399,7 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	previousUser = previousAsrText
 	previousAssitant = ""
 
-	system := AI_SYSTEM_PROMPT
-	if os.Getenv("AI_SYSTEM_PROMPT") != "" {
-		system = os.Getenv("AI_SYSTEM_PROMPT")
-	}
+	system := os.Getenv("AI_SYSTEM_PROMPT")
 	logger.Tf(ctx, "AI system prompt(AI_SYSTEM_PROMPT): %v", system)
 	messages := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: system},
@@ -440,29 +411,21 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 		Content: previousAsrText,
 	})
 
-	model := AI_MODEL
-	if os.Getenv("AI_MODEL") != "" {
-		model = os.Getenv("AI_MODEL")
+	model := os.Getenv("AI_MODEL")
+	var maxTokens int
+	if v, err := strconv.ParseInt(os.Getenv("AI_MAX_TOKENS"), 10, 64); err != nil {
+		return errors.Wrapf(err, "parse AI_MAX_TOKENS")
+	} else {
+		maxTokens = int(v)
 	}
 
-	maxTokens := AI_MAX_TOKENS
-	if os.Getenv("AI_MAX_TOKENS") != "" {
-		if v, err := strconv.ParseInt(os.Getenv("AI_MAX_TOKENS"), 10, 64); err != nil {
-			return errors.Wrapf(err, "parse AI_MAX_TOKENS")
-		} else {
-			maxTokens = int(v)
-		}
+	var temperature float32
+	if v, err := strconv.ParseFloat(os.Getenv("AI_TEMPERATURE"), 64); err != nil {
+		return errors.Wrapf(err, "parse AI_TEMPERATURE")
+	} else {
+		temperature = float32(v)
 	}
-
-	temperature := AI_TEMPERATURE
-	if os.Getenv("AI_TEMPERATURE") != "" {
-		if v, err := strconv.ParseFloat(os.Getenv("AI_TEMPERATURE"), 64); err != nil {
-			return errors.Wrapf(err, "parse AI_TEMPERATURE")
-		} else {
-			temperature = v
-		}
-	}
-	logger.Tf(ctx, "AI model(AI_MODEL): %v, max tokens(AI_MAX_TOKENS): %v, temperature(AI_TEMPERATURE): %v",
+	logger.Tf(ctx, "AI_MODEL: %v, AI_MAX_TOKENS: %v, AI_TEMPERATURE: %v",
 		model, maxTokens, temperature)
 
 	stream, err := client.CreateChatCompletionStream(
@@ -470,7 +433,7 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 			Model:       model,
 			Messages:    messages,
 			Stream:      true,
-			Temperature: float32(temperature),
+			Temperature: temperature,
 			MaxTokens:   maxTokens,
 		},
 	)
@@ -595,6 +558,34 @@ func setEnvDefault(key, value string) {
 	}
 }
 
+// httpCreateProxy create a reverse proxy for target URL.
+func httpCreateProxy(targetURL string) (*httputil.ReverseProxy, error) {
+	target, err := url.Parse(targetURL)
+	if err != nil {
+		return nil, errors.Wrapf(err, "parse backend %v", targetURL)
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		// We will set the server field.
+		resp.Header.Del("Server")
+
+		// We will set the CORS headers.
+		resp.Header.Del("Access-Control-Allow-Origin")
+		resp.Header.Del("Access-Control-Allow-Headers")
+		resp.Header.Del("Access-Control-Allow-Methods")
+		resp.Header.Del("Access-Control-Expose-Headers")
+		resp.Header.Del("Access-Control-Allow-Credentials")
+
+		// Not used right now.
+		resp.Header.Del("Access-Control-Request-Private-Network")
+
+		return nil
+	}
+
+	return proxy, nil
+}
+
 func doMain(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -691,8 +682,17 @@ func doMain(ctx context.Context) error {
 
 	// Serve static files.
 	static := http.FileServer(http.Dir("../build"))
+	// Proxy static files to 3000, react dev server.
+	proxy3000, err := httpCreateProxy("http://127.0.0.1:3000")
+	if err != nil {
+		return err
+	}
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		static.ServeHTTP(w, r)
+		if os.Getenv("PROXY_STATIC") == "true" {
+			proxy3000.ServeHTTP(w, r)
+		} else {
+			static.ServeHTTP(w, r)
+		}
 	})
 
 	// Setup the work dir.
@@ -823,8 +823,16 @@ func doMain(ctx context.Context) error {
 func main() {
 	ctx := context.Background()
 
+	setEnvDefault("OPENAI_PROXY", "api.openai.com")
 	setEnvDefault("HTTP_LISTEN", "3001")
 	setEnvDefault("HTTPS_LISTEN", "3443")
+	setEnvDefault("PROXY_STATIC", "true")
+	setEnvDefault("AI_NO_PADDING", "false")
+	setEnvDefault("AI_PADDING_TEXT", "My answer is ")
+	setEnvDefault("AI_SYSTEM_PROMPT", "You are a helpful assistant.")
+	setEnvDefault("AI_MODEL", openai.GPT4TurboPreview)
+	setEnvDefault("AI_MAX_TOKENS", "1024")
+	setEnvDefault("AI_TEMPERATURE", "0.9")
 
 	if err := doMain(ctx); err != nil {
 		logger.Ef(ctx, "Main error: %+v", err)

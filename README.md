@@ -14,6 +14,8 @@ docker run --rm -it -p 80:3000 -p 443:3443 \
 
 > Note: Setup the `OPENAI_PROXY` if you are not able to access the API directly.
 
+> Note: Please use `registry.cn-hangzhou.aliyuncs.com/ossrs/ai-talk` in China.
+
 Then you can access by http://localhost and happy to talk with AI.
 
 Then you can access by https://your-server-ip from your mobile browser.

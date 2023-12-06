@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	errors2 "errors"
+	errors_std "errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,12 +22,8 @@ import (
 	"unicode/utf8"
 )
 
-var previousAsrText string
-
-var previousUser, previousAssitant string
-var histories []openai.ChatCompletionMessage
-
-const AI_PROMPT = `
+// You can overwrite it by env AI_SYSTEM_PROMPT.
+const AI_SYSTEM_PROMPT = `
 我希望你是一个儿童的词语接龙的助手。
 我希望你做两个词的词语接龙。
 我希望你不要用重复的词语。
@@ -42,9 +39,25 @@ const AI_PROMPT = `
 苹果，是一种水果，长在树上，是红色的。
 果园，是一种地方，有很多树，有很多果子。
 `
+
+// You can overwrite it by env AI_MODEL.
 const AI_MODEL = openai.GPT4TurboPreview
 
+// Disable padding by set env AI_NO_PADDING=1.
+const FirstSentencePaddingLength = 8
+const FirstSentencePaddingText = "我说的是："
+
+// You can overwrite it by env AI_MAX_TOKENS.
+const AI_MAX_TOKENS = 1024
+
+// You can overwrite it by env AI_TEMPERATURE.
+const AI_TEMPERATURE = 0.9
+
 var ttsWorker TTSWorker
+var previousAsrText string
+var previousUser, previousAssitant string
+var histories []openai.ChatCompletionMessage
+var aiConfig openai.ClientConfig
 
 type TTSStencense struct {
 	rid      string
@@ -115,13 +128,7 @@ func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 
 	go func() {
 		if err := func() error {
-			var config openai.ClientConfig
-			config = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
-			if os.Getenv("OPENAI_PROXY") != "" {
-				config.BaseURL = fmt.Sprintf("http://%v/v1", os.Getenv("OPENAI_PROXY"))
-			}
-
-			client := openai.NewClientWithConfig(config)
+			client := openai.NewClientWithConfig(aiConfig)
 			resp, err := client.CreateSpeech(ctx, openai.CreateSpeechRequest{
 				Model:          openai.TTSModel1,
 				Input:          s.sentence,
@@ -159,7 +166,7 @@ func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletion
 	firstSentense := true
 	for !finished && ctx.Err() == nil {
 		response, err := stream.Recv()
-		finished = errors2.Is(err, io.EOF)
+		finished = errors_std.Is(err, io.EOF)
 		if err != nil && !finished {
 			return errors.Wrapf(err, "recv chat")
 		}
@@ -219,8 +226,10 @@ func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletion
 
 			if firstSentense {
 				firstSentense = false
-				if !isEnglish(sentence) && utf8.RuneCount([]byte(sentence)) < 8 {
-					sentence = fmt.Sprintf("我说的是：%v", sentence)
+				if os.Getenv("AI_NO_PADDING") != "1" &&
+					!isEnglish(sentence) &&
+					utf8.RuneCount([]byte(sentence)) < FirstSentencePaddingLength {
+					sentence = fmt.Sprintf("%v%v", FirstSentencePaddingText, sentence)
 				}
 			}
 
@@ -329,20 +338,53 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	previousUser = previousAsrText
 	previousAssitant = ""
 
-	messages := []openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleSystem, Content: AI_PROMPT},
+	system := AI_SYSTEM_PROMPT
+	if os.Getenv("AI_SYSTEM_PROMPT") != "" {
+		system = os.Getenv("AI_SYSTEM_PROMPT")
 	}
+	logger.Tf(ctx, "AI system prompt(AI_SYSTEM_PROMPT): %v", system)
+	messages := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: system},
+	}
+
 	messages = append(messages, histories...)
 	messages = append(messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
 		Content: previousAsrText,
 	})
+
+	model := AI_MODEL
+	if os.Getenv("AI_MODEL") != "" {
+		model = os.Getenv("AI_MODEL")
+	}
+
+	maxTokens := AI_MAX_TOKENS
+	if os.Getenv("AI_MAX_TOKENS") != "" {
+		if v, err := strconv.ParseInt(os.Getenv("AI_MAX_TOKENS"), 10, 64); err != nil {
+			return errors.Wrapf(err, "parse AI_MAX_TOKENS")
+		} else {
+			maxTokens = int(v)
+		}
+	}
+
+	temperature := AI_TEMPERATURE
+	if os.Getenv("AI_TEMPERATURE") != "" {
+		if v, err := strconv.ParseFloat(os.Getenv("AI_TEMPERATURE"), 64); err != nil {
+			return errors.Wrapf(err, "parse AI_TEMPERATURE")
+		} else {
+			temperature = v
+		}
+	}
+	logger.Tf(ctx, "AI model(AI_MODEL): %v, max tokens(AI_MAX_TOKENS): %v, temperature(AI_TEMPERATURE): %v",
+		model, maxTokens, temperature)
+
 	stream, err := client.CreateChatCompletionStream(
 		ctx, openai.ChatCompletionRequest{
-			Model:       AI_MODEL,
+			Model:       model,
 			Messages:    messages,
 			Stream:      true,
-			Temperature: 0.9,
+			Temperature: float32(temperature),
+			MaxTokens:   maxTokens,
 		},
 	)
 	if err != nil {
@@ -367,9 +409,29 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 }
 
 func doMain(ctx context.Context) error {
-	if err := godotenv.Overload(); err != nil {
+	if _, err := os.Stat("../.env"); err != nil {
+		return errors.Wrapf(err, "not found .env")
+	}
+	if err := godotenv.Overload("../.env"); err != nil {
 		return errors.Wrapf(err, "load env")
 	}
+
+	aiConfig = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
+	if proxy := os.Getenv("OPENAI_PROXY"); proxy != "" {
+		if strings.Contains(proxy, "://") {
+			aiConfig.BaseURL = proxy
+		} else if strings.Contains(proxy, "openai.com") {
+			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
+		} else {
+			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
+		}
+
+		if !strings.HasSuffix(aiConfig.BaseURL, "/v1") {
+			aiConfig.BaseURL = fmt.Sprintf("%v/v1", aiConfig.BaseURL)
+		}
+	}
+	logger.Tf(ctx, "OpenAI key(OPENAI_API_KEY): %vB, proxy(OPENAI_PROXY): %v, base url: %v",
+		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), aiConfig.BaseURL)
 
 	http.HandleFunc("/api/ai-talk/upload/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleAudio(ctx, w, r); err != nil {

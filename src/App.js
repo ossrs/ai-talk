@@ -30,6 +30,7 @@ function App() {
     if (mediaRecorderRef.current) return;
 
     setBtnClassName('DynamicButton');
+    writeLog("===========================");
 
     navigator.mediaDevices.getUserMedia(
       { audio: true }
@@ -48,30 +49,86 @@ function App() {
   const stopRecording = React.useCallback(() => {
     if (!mediaRecorderRef.current) return;
 
-    mediaRecorderRef.current.addEventListener("stop", () => {
+    mediaRecorderRef.current.addEventListener("stop", async () => {
       writeLog(`Event: stopping, ${audioChunkRef.current.length} chunks`);
 
       setLoading(true);
-      writeLog(`Uploading ${audioChunkRef.current.length} chunks`);
 
-      const audioBlob = new Blob(audioChunkRef.current);
-      const formData = new FormData();
-      // It can be aac or ogg codec.
-      formData.append('file', audioBlob, 'input.audio');
-      fetch('/api/ai-talk/upload/', {
-        method: 'POST',
-        body: formData,
-      }).then(response => {
-        return response.json();
-      }).then((data) => {
-        writeLog(`Upload success: ${JSON.stringify(data)}`);
-      }).catch(error => alert(error)).finally(() => {
+      try {
+        // Upload the user input audio to the server.
+        const uuid = await new Promise((resolve, reject) => {
+          writeLog(`ASR: Uploading ${audioChunkRef.current.length} chunks`);
+          const audioBlob = new Blob(audioChunkRef.current);
+          audioChunkRef.current = [];
+
+          // It can be aac or ogg codec.
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'input.audio');
+
+          fetch('/api/ai-talk/upload/', {
+            method: 'POST',
+            body: formData,
+          }).then(response => {
+            return response.json();
+          }).then((data) => {
+            writeLog(`ASR: Upload success: ${data.data.uuid} ${data.data.asr}`);
+            resolve(data.data.uuid);
+          }).catch((error) => reject(error));
+        });
+
+        // Get the AI generated audio from the server.
+        while (true) {
+          writeLog(`TTS: Requesting ${uuid} response audios`);
+          let readyUUID = null;
+          while (!readyUUID) {
+            const resp = await new Promise((resolve, reject) => {
+              fetch(`/api/ai-talk/question/?rid=${uuid}`, {
+                method: 'POST',
+              }).then(response => {
+                return response.json();
+              }).then((data) => {
+                if (data?.data?.uuid) writeLog(`TTS: Audio ready: ${data.data.uuid} ${data.data.tts}`);
+                resolve(data.data);
+              }).catch(error => reject(error));
+            });
+
+            if (!resp.uuid) {
+              break;
+            }
+
+            if (resp.processing) {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+              continue;
+            }
+
+            readyUUID = resp.uuid;
+          }
+
+          // All audios are played.
+          if (!readyUUID) {
+            writeLog(`TTS: All audios are played.`);
+            break;
+          }
+
+          // Play the AI generated audio.
+          await new Promise(resolve => {
+            const url = `/api/ai-talk/tts/?rid=${uuid}&uuid=${readyUUID}`;
+            writeLog(`TTS: Playing ${url}`);
+            const audio = new Audio(url);
+            audio.loop = false;
+            audio.addEventListener('ended', () => {
+              writeLog(`TTS: Played ${url} done.`);
+              resolve();
+            });
+            audio.play();
+          });
+        }
+      } catch (e) {
+        alert(e);
+      } finally {
         setLoading(false);
         setBtnClassName('StaticButton');
-      });
-
-      audioChunkRef.current = [];
-      writeLog(`Event: Recording stopped`);
+      }
     });
 
     writeLog(`Event: stop, ${audioChunkRef.current.length} chunks`);

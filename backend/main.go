@@ -14,9 +14,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -58,75 +61,112 @@ var previousAsrText string
 var previousUser, previousAssitant string
 var histories []openai.ChatCompletionMessage
 var aiConfig openai.ClientConfig
+var workDir string
 
 type TTSStencense struct {
-	rid      string
-	uuid     string
+	// Request UUID.
+	rid string
+	// Sentence UUID.
+	uuid string
+	// Sentence text.
 	sentence string
-	ttsFile  string
-	ready    bool
-	err      error
+	// The TTS file path.
+	ttsFile string
+	// Whether TTS is done, ready to play.
+	ready bool
+	// Whether TTS is error, sentence failed.
+	err error
+	// Whether dummy sentence, to identify the request is alive.
+	dummy bool
+	// Signal to remove the TTS file immediately.
+	removeSignal chan bool
 }
 
 type TTSWorker struct {
 	sentences []*TTSStencense
 	lock      sync.Mutex
+	wg        sync.WaitGroup
 }
 
-func (v *TTSWorker) Run(ctx context.Context) {
-	go func() {
-		for ctx.Err() == nil {
-			select {
-			case <-ctx.Done():
-			case <-time.After(100 * time.Millisecond):
-			}
-
-			if len(v.sentences) == 0 {
-				continue
-			}
-
-			if sentence := v.sentences[0]; !sentence.ready && sentence.err == nil {
-				continue
-			}
-
-			func() {
-				var sentence *TTSStencense
-				func() {
-					v.lock.Lock()
-					defer v.lock.Unlock()
-
-					sentence = v.sentences[0]
-					v.sentences = v.sentences[1:]
-				}()
-
-				defer func() {
-					if _, err := os.Stat(sentence.ttsFile); err == nil {
-						logger.Tf(ctx, "remove %v", sentence.ttsFile)
-						os.Remove(sentence.ttsFile)
-					}
-				}()
-
-				if sentence.err != nil {
-					logger.Ef(ctx, "TTS failed, err %+v", sentence.err)
-				} else if sentence.ready {
-					logger.Tf(ctx, "TTS ok, file %v", sentence.ttsFile)
-
-					// Play the file.
-					fmt.Fprintf(os.Stderr, fmt.Sprintf("Bot: %v\n", sentence.sentence))
-					exec.CommandContext(ctx, "ffplay", "-autoexit", "-nodisp", sentence.ttsFile).Run()
-				}
-			}()
-		}
-	}()
+func (v *TTSWorker) Close() error {
+	v.wg.Wait()
+	return nil
 }
 
-func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
+func (v *TTSWorker) QueryTTS(requestUUID, uuid string) *TTSStencense {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
-	v.sentences = append(v.sentences, s)
+	for _, s := range v.sentences {
+		if s.rid == requestUUID && s.uuid == uuid {
+			return s
+		}
+	}
 
+	return nil
+}
+
+func (v *TTSWorker) QueryReady(ctx context.Context, requestUUID string) *TTSStencense {
+	for ctx.Err() == nil {
+		if s := v.Query(requestUUID); s == nil {
+			return nil
+		} else if !s.dummy && (s.ready || s.err != nil) {
+			return s
+		}
+
+		select {
+		case <-ctx.Done():
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	return nil
+}
+
+func (v *TTSWorker) Query(requestUUID string) *TTSStencense {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	for _, s := range v.sentences {
+		if s.rid == requestUUID {
+			return s
+		}
+	}
+
+	return nil
+}
+
+func (v *TTSWorker) Remove(uuid string) {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	for i, s := range v.sentences {
+		if s.uuid == uuid {
+			v.sentences = append(v.sentences[:i], v.sentences[i+1:]...)
+			return
+		}
+	}
+}
+
+func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
+	// Append the sentence to queue.
+	func() {
+		v.lock.Lock()
+		defer v.lock.Unlock()
+
+		v.sentences = append(v.sentences, s)
+	}()
+
+	// Now that we have a real sentence, we should remove the dummy sentence.
+	if dummy := v.Query(s.rid); dummy != nil && dummy.dummy && dummy.uuid != s.uuid {
+		v.Remove(dummy.uuid)
+	}
+
+	// Start a goroutine to do TTS task.
+	v.wg.Add(1)
 	go func() {
+		defer v.wg.Done()
+
 		if err := func() error {
 			client := openai.NewClientWithConfig(aiConfig)
 			resp, err := client.CreateSpeech(ctx, openai.CreateSpeechRequest{
@@ -157,6 +197,28 @@ func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 		}(); err != nil {
 			s.err = err
 		}
+
+		// Start a goroutine to remove the sentence.
+		v.wg.Add(1)
+		go func() {
+			defer v.wg.Done()
+
+			select {
+			case <-ctx.Done():
+			case <-time.After(300 * time.Second):
+			case <-s.removeSignal:
+			}
+
+			logger.Tf(ctx, "Remove %v %v", s.uuid, s.ttsFile)
+
+			ttsWorker.Remove(s.uuid)
+
+			if s.ttsFile != "" {
+				if _, err := os.Stat(s.ttsFile); err == nil {
+					os.Remove(s.ttsFile)
+				}
+			}
+		}()
 	}()
 }
 
@@ -234,11 +296,12 @@ func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletion
 			}
 
 			s := &TTSStencense{
-				rid:      rid,
-				uuid:     uuid.NewString(),
-				sentence: sentence,
+				rid:          rid,
+				uuid:         uuid.NewString(),
+				sentence:     sentence,
+				removeSignal: make(chan bool, 1),
 			}
-			s.ttsFile = fmt.Sprintf("/tmp/%v-sentence-%v-tts.opus", rid, s.uuid)
+			s.ttsFile = path.Join(workDir, fmt.Sprintf("%v-sentence-%v-tts.opus", rid, s.uuid))
 			sentence = ""
 
 			ttsWorker.Add(ctx, s)
@@ -255,7 +318,7 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	rid := uuid.NewString()
 
 	// We save the input audio to *.audio file, it can be aac or opus codec.
-	inputFile := fmt.Sprintf("/tmp/%v-input.audio", rid)
+	inputFile := path.Join(workDir, fmt.Sprintf("%v-input.audio", rid))
 	defer os.Remove(inputFile)
 	if err := func() error {
 		r.ParseMultipartForm(20 * 1024 * 1024)
@@ -282,7 +345,7 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 		return errors.Wrapf(err, "copy %v", inputFile)
 	}
 
-	outputFile := fmt.Sprintf("/tmp/%v-input.m4a", rid)
+	outputFile := path.Join(workDir, fmt.Sprintf("%v-input.m4a", rid))
 	defer os.Remove(outputFile)
 	if true {
 		err := exec.CommandContext(ctx, "ffmpeg",
@@ -391,6 +454,13 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 		return errors.Wrapf(err, "create chat")
 	}
 
+	// Insert a dummy sentence to identify the request is alive.
+	ttsWorker.Add(ctx, &TTSStencense{
+		rid:   rid,
+		uuid:  uuid.NewString(),
+		dummy: true,
+	})
+
 	// Never wait for any response.
 	go func() {
 		defer stream.Close()
@@ -402,13 +472,94 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	// Response the request UUID and pulling the response.
 	ohttp.WriteData(ctx, w, r, struct {
 		UUID string `json:"uuid"`
+		ASR  string `json:"asr"`
 	}{
 		UUID: rid,
+		ASR:  asrText,
 	})
 	return nil
 }
 
+func handleQuestion(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	rid := r.URL.Query().Get("rid")
+	if rid == "" {
+		return errors.Errorf("empty rid")
+	}
+
+	sentence := ttsWorker.QueryReady(ctx, rid)
+	if sentence == nil {
+		ohttp.WriteData(ctx, w, r, struct {
+			UUID string `json:"uuid"`
+		}{})
+		return nil
+	}
+
+	ohttp.WriteData(ctx, w, r, struct {
+		Processing bool   `json:"processing"`
+		UUID       string `json:"uuid"`
+		TTS        string `json:"tts"`
+	}{
+		Processing: sentence.dummy || !sentence.ready,
+		UUID:       sentence.uuid,
+		TTS:        sentence.sentence,
+	})
+	return nil
+}
+
+func handleTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	rid := r.URL.Query().Get("rid")
+	if rid == "" {
+		return errors.Errorf("empty rid")
+	}
+
+	uuid := r.URL.Query().Get("uuid")
+	if uuid == "" {
+		return errors.Errorf("empty uuid")
+	}
+
+	sentence := ttsWorker.QueryTTS(rid, uuid)
+	if sentence == nil {
+		return errors.Errorf("no sentence for %v", uuid)
+	}
+
+	fmt.Fprintf(os.Stderr, "Bot: %v\n", sentence.sentence)
+
+	// Read the ttsFile and response it as opus audio.
+	w.Header().Set("Content-Type", "audio/opus")
+	http.ServeFile(w, r, sentence.ttsFile)
+
+	// Remove it.
+	ttsWorker.Remove(uuid)
+
+	select {
+	case <-ctx.Done():
+	case sentence.removeSignal <- true:
+	}
+
+	return nil
+}
+
 func doMain(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Cleanup TTS worker.
+	defer ttsWorker.Close()
+
+	// Signal handler.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigs
+		logger.Tf(ctx, "Got signal %v", sig)
+		cancel()
+	}()
+
+	// Load env vriables from file.
 	if _, err := os.Stat("../.env"); err != nil {
 		return errors.Wrapf(err, "not found .env")
 	}
@@ -416,6 +567,7 @@ func doMain(ctx context.Context) error {
 		return errors.Wrapf(err, "load env")
 	}
 
+	// Initialize OpenAI client config.
 	aiConfig = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
 	if proxy := os.Getenv("OPENAI_PROXY"); proxy != "" {
 		if strings.Contains(proxy, "://") {
@@ -433,26 +585,57 @@ func doMain(ctx context.Context) error {
 	logger.Tf(ctx, "OpenAI key(OPENAI_API_KEY): %vB, proxy(OPENAI_PROXY): %v, base url: %v",
 		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), aiConfig.BaseURL)
 
+	// HTTP API handlers.
 	http.HandleFunc("/api/ai-talk/upload/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleAudio(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle audio failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
 		}
 	})
 
-	ttsWorker.Run(ctx)
+	http.HandleFunc("/api/ai-talk/question/", func(w http.ResponseWriter, r *http.Request) {
+		if err := handleQuestion(ctx, w, r); err != nil {
+			logger.Ef(ctx, "Handle question failed, err %+v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 
+	http.HandleFunc("/api/ai-talk/tts/", func(w http.ResponseWriter, r *http.Request) {
+		if err := handleTTS(ctx, w, r); err != nil {
+			logger.Ef(ctx, "Handle tts failed, err %+v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// Setup the work dir.
+	if pwd, err := os.Getwd(); err != nil {
+		return errors.Wrapf(err, "getwd")
+	} else {
+		workDir = pwd
+	}
+
+	// Start HTTP server.
 	listen := ":3001"
-	fmt.Fprintf(os.Stderr, fmt.Sprintf("Listen at %v\n", listen))
+	fmt.Fprintf(os.Stderr, fmt.Sprintf("Listen at %v, workDir=%v\n", listen, workDir))
 	logger.Tf(ctx, "Listen at %v", listen)
-	return http.ListenAndServe(listen, nil)
+	server := &http.Server{Addr: listen, Handler: nil}
+
+	go func() {
+		<-ctx.Done()
+		server.Shutdown(ctx)
+	}()
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return errors.Wrapf(err, "listen and serve")
+	}
+	logger.Tf(ctx, "HTTP Server closed")
+	return nil
 }
 
 func main() {
 	ctx := context.Background()
 	if err := doMain(ctx); err != nil {
-		logger.E(ctx, "Main error: %v", err)
+		logger.Ef(ctx, "Main error: %+v", err)
 		os.Exit(-1)
 	}
 }

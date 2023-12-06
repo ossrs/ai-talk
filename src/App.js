@@ -67,7 +67,7 @@ function App() {
 
     setBtnClassName('DynamicButton');
     writeLongLog("===========================");
-    writeShortLog("===========================");
+    writeShortLog("=============");
 
     navigator.mediaDevices.getUserMedia(
       { audio: true }
@@ -81,7 +81,7 @@ function App() {
       mediaRecorderRef.current.start();
       writeLongLog(`Event: Recording started`);
     }).catch(error => alert(error));
-  }, [writeLongLog]);
+  }, [writeLongLog, writeShortLog, setBtnClassName, mediaRecorderRef, audioChunkRef]);
 
   const stopRecording = React.useCallback(() => {
     if (!mediaRecorderRef.current) return;
@@ -194,7 +194,7 @@ function App() {
     writeLongLog(`Event: stop, ${audioChunkRef.current.length} chunks`);
     mediaRecorderRef.current.stop();
     mediaRecorderRef.current = null;
-  }, [writeLongLog]);
+  }, [writeLongLog, writeShortLog, setBtnClassName, mediaRecorderRef, audioChunkRef, setLoading, audioPlayerRef]);
 
   const onStart = React.useCallback(() => {
     writeLongLog("Start the app");

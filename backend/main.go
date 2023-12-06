@@ -524,6 +524,8 @@ func handleTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) erro
 	if sentence == nil {
 		return errors.Errorf("no sentence for %v %v", rid, uuid)
 	}
+	logger.Tf(ctx, "Query sentence %v %v, dummy=%v, sentence=%v",
+		rid, uuid, sentence.dummy, sentence.sentence)
 
 	fmt.Fprintf(os.Stderr, "Bot: %v\n", sentence.sentence)
 
@@ -643,7 +645,7 @@ func doMain(ctx context.Context) error {
 		if !strings.Contains(filename, ".") {
 			filename = fmt.Sprintf("%v.aac", filename)
 		}
-		
+
 		ext := strings.Trim(path.Ext(filename), ".")
 		contentType := fmt.Sprintf("audio/%v", ext)
 		logger.Tf(ctx, "Serve example file=%v, ext=%v, contentType=%v", filename, ext, contentType)

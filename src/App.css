@@ -9,6 +9,12 @@
   border-radius: 30%;
 }
 
+.StartButton {
+  width: 200px;
+  height: 50px;
+  border-radius: 10%;
+}
+
 .LogPanel {
   text-align: left;
 }

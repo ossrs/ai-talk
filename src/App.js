@@ -8,6 +8,8 @@ function App() {
   const audioChunkRef = React.useRef([]);
   const [logRenders, setLogRenders] = React.useState([]);
   const logs = React.useRef([]);
+  const [started, setStarted] = React.useState(false);
+  const audioPlayerRef = React.useRef(null);
 
   const writeLog = React.useCallback((msg) => {
     const date = new Date();
@@ -115,13 +117,19 @@ function App() {
           await new Promise(resolve => {
             const url = `/api/ai-talk/tts/?rid=${uuid}&uuid=${readyUUID}`;
             writeLog(`TTS: Playing ${url}`);
-            const audio = new Audio(url);
-            audio.loop = false;
-            audio.addEventListener('ended', () => {
+
+            const listener = () => {
+              audioPlayerRef.current.removeEventListener('ended', listener);
               writeLog(`TTS: Played ${url} done.`);
               resolve();
+            };
+            audioPlayerRef.current.addEventListener('ended', listener);
+
+            audioPlayerRef.current.src = url;
+            audioPlayerRef.current.play().catch(error => {
+              writeLog(`TTS: Play ${url} failed: ${error}`);
+              resolve();
             });
-            audio.play();
           });
 
           // Remove the AI generated audio.
@@ -151,7 +159,14 @@ function App() {
 
   return (<div className="App">
     <header className="App-header">
-      <button
+      {!started && <button className='StartButton' onClick={(e) => {
+        const audio = new Audio("/api/ai-talk/examples/silent.aac");
+        audio.loop = false;
+        audio.play();
+        audioPlayerRef.current = audio;
+        setStarted(true);
+      }}>Click to start</button>}
+      {started && <button
         onTouchStart={(e) => {
           startRecording();
         }}
@@ -172,7 +187,7 @@ function App() {
         }}
         className={btnClassName}
         disabled={loading}
-      ></button>
+      >Press to talk</button>}
     </header>
     <ul className='LogPanel'>
       {logRenders.map((log, index) => {

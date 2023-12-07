@@ -17,6 +17,16 @@ function useIsMobile() {
   return isMobile;
 }
 
+function useIsOssrsNet() {
+  const [isOssrsNet, setIsOssrsNet] = React.useState(false);
+  React.useEffect(() => {
+    if (window.location.hostname.indexOf('ossrs.net') >= 0) {
+      setIsOssrsNet(true);
+    }
+  }, [setIsOssrsNet]);
+  return isOssrsNet;
+}
+
 function App() {
   const [btnClassName, setBtnClassName] = React.useState('StaticButton');
   const [loading, setLoading] = React.useState(false);
@@ -25,6 +35,7 @@ function App() {
   const [started, setStarted] = React.useState(false);
   const audioPlayerRef = React.useRef(null);
   const isMobile = useIsMobile();
+  const isOssrsNet = useIsOssrsNet();
 
   const [showShortLogs, setShowShortLogs] = React.useState(true);
   const [longLogRenders, setLongLogRenders] = React.useState([]);
@@ -314,6 +325,7 @@ function App() {
         return (<li key={index}>{log}</li>);
       })}
     </ul>
+    {isOssrsNet && <img src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk"/>}
   </div>);
 }
 

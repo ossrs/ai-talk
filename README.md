@@ -44,3 +44,5 @@ Other optional environment variables:
 * `AI_PADDING_TEXT`: The padding text, default to `My answer is `.
 * `AI_MAX_TOKENS`: The max tokens, default to `1024`.
 * `AI_TEMPERATURE`: The temperature, default to `0.9`.
+
+Winlin, 2023.12

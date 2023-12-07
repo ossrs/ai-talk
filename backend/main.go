@@ -287,7 +287,6 @@ func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletion
 			if firstSentense {
 				firstSentense = false
 				if os.Getenv("AI_NO_PADDING") != "true" &&
-					!isEnglish(sentence) &&
 					utf8.RuneCount([]byte(sentence)) < FirstSentencePaddingLength {
 					sentence = fmt.Sprintf("%v%v", os.Getenv("AI_PADDING_TEXT"), sentence)
 				}

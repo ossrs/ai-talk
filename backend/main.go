@@ -265,7 +265,7 @@ func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletion
 
 		// Determine whether new sentence by length.
 		if isEnglish(sentence) {
-			if nn := strings.Count(sentence, " "); nn >= 10 {
+			if nn := strings.Count(sentence, " "); nn >= 30 {
 				newSentence = true
 			} else if nn < 3 {
 				newSentence = false
@@ -370,14 +370,15 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 			Model:    openai.Whisper1,
 			FilePath: outputFile,
 			Format:   openai.AudioResponseFormatJSON,
-			Language: "zh",
+			Language: os.Getenv("AI_ASR_LANGUAGE"),
 			Prompt:   previousAsrText,
 		},
 	)
 	if err != nil {
 		return errors.Wrapf(err, "transcription")
 	}
-	logger.Tf(ctx, "ASR ok prompt=<%v>, resp is <%v>", previousAsrText, resp.Text)
+	logger.Tf(ctx, "ASR ok, lang=%v, prompt=<%v>, resp is <%v>",
+		os.Getenv("AI_ASR_LANGUAGE"), previousAsrText, resp.Text)
 	asrText := resp.Text
 	previousAsrText = resp.Text
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
@@ -624,13 +625,15 @@ func doMain(ctx context.Context) error {
 	setEnvDefault("AI_MAX_TOKENS", "1024")
 	setEnvDefault("AI_TEMPERATURE", "0.9")
 	setEnvDefault("KEEP_AUDIO_FILES", "false")
+	setEnvDefault("AI_ASR_LANGUAGE", "en")
 	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, HTTP_LISTEN=%v, HTTPS_LISTEN=%v, PROXY_STATIC=%v, "+
 		"AI_NO_PADDING=%v, AI_PADDING_TEXT=%v, AI_SYSTEM_PROMPT=%v, AI_MODEL=%v, AI_MAX_TOKENS=%v, AI_TEMPERATURE=%v, "+
-		"KEEP_AUDIO_FILES=%v",
+		"KEEP_AUDIO_FILES=%v, AI_ASR_LANGUAGE=%v",
 		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("HTTP_LISTEN"),
 		os.Getenv("HTTPS_LISTEN"), os.Getenv("PROXY_STATIC"), os.Getenv("AI_NO_PADDING"),
 		os.Getenv("AI_PADDING_TEXT"), os.Getenv("AI_SYSTEM_PROMPT"), os.Getenv("AI_MODEL"),
 		os.Getenv("AI_MAX_TOKENS"), os.Getenv("AI_TEMPERATURE"), os.Getenv("KEEP_AUDIO_FILES"),
+		os.Getenv("AI_ASR_LANGUAGE"),
 	)
 
 	// Initialize OpenAI client config.

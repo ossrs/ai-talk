@@ -37,11 +37,13 @@ https://github.com/winlinvip/ai-talk/assets/2777660/e9796775-0e60-4ac3-a641-1220
 
 <details>
 <summary>Chinese Words Solitaire Game</summary>
+
 Prompt:
 ```
 AI_ASR_LANGUAGE=zh
 AI_SYSTEM_PROMPT=我希望你是一个儿童的词语接龙的助手。我希望你做两个词的词语接龙。我希望你不要用重复的词语。我希望你回答比较简短，不超过50字。我希望你重复我说的词，然后再接龙。我希望你回答时，解释下词语的含义。请记住，你讲的答案是给6岁小孩听得懂的。请记住，你要做词语接龙。例如：我：苹果。你：苹果，果园。苹果，是一种水果，长在树上，是红色的。果园，是一种地方，有很多树，有很多果子。
 ```
+
 https://github.com/winlinvip/ai-talk/assets/2777660/175b100b-8eba-45ca-ac41-0484d026d623
 </details>
     
@@ -79,6 +81,17 @@ Optional environment variables:
 * `OPENAI_PROXY`: The OpenAI API proxy, default to `api.openai.com`, which directly access OpenAI API without proxy.
 * `AI_SYSTEM_PROMPT`: The system prompt, default to `You are a helpful assistant.`.
 * `AI_MODEL`: The AI model, default to `gpt-4-1106-preview` which is the latest model.
+* `AI_ASR_LANGUAGE`: The language for Whisper ASR, default to `en`, see [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes), bellow are some examples:
+  * `en`: English
+  * `zh`: Chinese
+  * `fr`: French 
+  * `de`: German
+  * `it`: Italian
+  * `ja`: Japanese
+  * `ko`: Korean
+  * `pt`: Portuguese
+  * `ru`: Russian
+  * `es`: Spanish
 
 Other optional environment variables:
 

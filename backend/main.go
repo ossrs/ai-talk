@@ -35,9 +35,6 @@ import (
 	"unicode/utf8"
 )
 
-// Disable padding by set env AI_NO_PADDING=true.
-const FirstSentencePaddingLength = 8
-
 var ttsWorker TTSWorker
 var previousAsrText string
 var previousUser, previousAssitant string
@@ -286,8 +283,7 @@ func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletion
 
 			if firstSentense {
 				firstSentense = false
-				if os.Getenv("AI_NO_PADDING") != "true" &&
-					utf8.RuneCount([]byte(sentence)) < FirstSentencePaddingLength {
+				if os.Getenv("AI_NO_PADDING") != "true" {
 					sentence = fmt.Sprintf("%v%v", os.Getenv("AI_PADDING_TEXT"), sentence)
 				}
 			}

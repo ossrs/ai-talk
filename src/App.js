@@ -238,7 +238,7 @@ function App() {
         setTimeout(() => {
           recorder.stop();
           writeLongLog(`Start: Microphone state is ${recorder.state}`);
-        }, 200);
+        }, 100);
       }).catch(error => alert(`Open microphone error: ${error}`));
     });
 
@@ -246,7 +246,7 @@ function App() {
       stream.getTracks().forEach(track => track.stop());
       setTimeout(() => {
         resolve();
-      }, 500);
+      }, 200);
     });
 
     setStarted(true);
@@ -273,6 +273,10 @@ function App() {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [started]);
+
+  React.useEffect(() => {
+    document.title = "AI Talk";
+  }, []);
 
   return (<div className="App">
     <header className="App-header">

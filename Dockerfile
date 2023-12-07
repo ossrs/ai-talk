@@ -32,7 +32,7 @@ FROM ossrs/srs:ubuntu20 as ffmpeg
 FROM ubuntu:focal as dist
 
 COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
-COPY --from=build /g/backend/silent.aac /g/backend/server /g/backend/
+COPY --from=build /g/backend/*.aac /g/backend/*.mp3 /g/backend/*.opus /g/backend/server /g/backend/
 COPY --from=ui /g/build /g/build
 
 ENV HTTP_LISTEN=3000 HTTPS_LISTEN=3443 PROXY_STATIC=false

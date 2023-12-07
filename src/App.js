@@ -196,33 +196,41 @@ function App() {
     mediaRecorderRef.current = null;
   }, [writeLongLog, writeShortLog, setBtnClassName, mediaRecorderRef, audioChunkRef, setLoading, audioPlayerRef]);
 
-  const onStart = React.useCallback(() => {
+  const onStart = React.useCallback(async () => {
     writeLongLog("Start the app");
     writeShortLog("Start the app");
 
-    const audio = new Audio("/api/ai-talk/examples/silent.aac");
-    audio.loop = false;
-    audio.play();
-    audioPlayerRef.current = audio;
-
-    navigator.mediaDevices.getUserMedia(
-      { audio: true }
-    ).then((stream) => {
-      const recorder = new MediaRecorder(stream);
-      const audioChunks = [];
-      recorder.addEventListener("dataavailable", ({ data }) => {
-        audioChunks.push(data);
+    await new Promise(resolve => {
+      audioPlayerRef.current.src = "/api/ai-talk/examples/hello.aac";
+      audioPlayerRef.current.play()
+        .catch(error => alert(`Play error: ${error}`));
+      audioPlayerRef.current.addEventListener('ended', () => {
+        resolve();
       });
-      recorder.addEventListener("stop", async () => {
-        writeLongLog(`Start: Microphone ${audioChunks.length} chunks`);
-        setStarted(true);
-      });
-      recorder.start();
+    });
 
-      setTimeout(() => {
-        recorder.stop();
-      }, 500);
-    }).catch(error => alert(`Open microphone error: ${error}`));
+    await new Promise(resolve => {
+      navigator.mediaDevices.getUserMedia(
+        {audio: true}
+      ).then((stream) => {
+        const recorder = new MediaRecorder(stream);
+        const audioChunks = [];
+        recorder.addEventListener("dataavailable", ({data}) => {
+          audioChunks.push(data);
+        });
+        recorder.addEventListener("stop", async () => {
+          writeLongLog(`Start: Microphone ${audioChunks.length} chunks`);
+          resolve();
+        });
+        recorder.start();
+
+        setTimeout(() => {
+          recorder.stop();
+        }, 500);
+      }).catch(error => alert(`Open microphone error: ${error}`));
+
+      setStarted(true);
+    });
   }, [writeLongLog, writeShortLog, setStarted, audioPlayerRef]);
 
   React.useEffect(() => {
@@ -265,14 +273,14 @@ function App() {
         disabled={loading}
       >{isMobile ? 'Press to talk' : 'Press the R key to talk'}</button>}
     </header>
+    <p><audio ref={audioPlayerRef} controls={true} hidden={false} /></p>
     <p>
       <button onClick={(e) => {
         setShowShortLogs(!showShortLogs);
       }}>{showShortLogs ? 'Detail Logs' : 'Short Logs'}</button> &nbsp;
       <button onClick={(e) => {
-        const audio = new Audio("/api/ai-talk/examples/example.aac");
-        audio.loop = false;
-        audio.play();
+        audioPlayerRef.current.src = "/api/ai-talk/examples/example.aac";
+        audioPlayerRef.current.play();
       }}>Example aac</button> &nbsp;
     </p>
     <ul className='LogPanel'>

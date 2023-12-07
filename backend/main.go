@@ -224,8 +224,8 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
 	}()
 }
 
-// When user start a scenario, response a scenario object, which identified by sid or scenario id.
-func handleScenarioStart(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+// When user start a scenario or stage, response a stage object, which identified by sid or stage id.
+func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
@@ -646,7 +646,7 @@ func doMain(ctx context.Context) error {
 	handler := http.NewServeMux()
 
 	handler.HandleFunc("/api/ai-talk/start/", func(w http.ResponseWriter, r *http.Request) {
-		if err := handleScenarioStart(ctx, w, r); err != nil {
+		if err := handleStageStart(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle start failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

@@ -80,7 +80,7 @@ function App() {
       });
       mediaRecorderRef.current.start();
       writeLongLog(`Event: Recording started`);
-    }).catch(error => alert(error));
+    }).catch(error => alert(`Record error: ${error}`));
   }, [writeLongLog, writeShortLog, setBtnClassName, mediaRecorderRef, audioChunkRef]);
 
   const stopRecording = React.useCallback(() => {
@@ -204,7 +204,25 @@ function App() {
     audio.loop = false;
     audio.play();
     audioPlayerRef.current = audio;
-    setStarted(true);
+
+    navigator.mediaDevices.getUserMedia(
+      { audio: true }
+    ).then((stream) => {
+      const recorder = new MediaRecorder(stream);
+      const audioChunks = [];
+      recorder.addEventListener("dataavailable", ({ data }) => {
+        audioChunks.push(data);
+      });
+      recorder.addEventListener("stop", async () => {
+        writeLongLog(`Start: Microphone ${audioChunks.length} chunks`);
+        setStarted(true);
+      });
+      recorder.start();
+
+      setTimeout(() => {
+        recorder.stop();
+      }, 500);
+    }).catch(error => alert(`Open microphone error: ${error}`));
   }, [writeLongLog, writeShortLog, setStarted, audioPlayerRef]);
 
   React.useEffect(() => {

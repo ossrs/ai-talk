@@ -17,6 +17,15 @@ ADD . /g
 WORKDIR /g
 RUN cd backend && go build .
 
+# Use UPX to compress the binary.
+RUN apt-get install -y upx
+
+RUN echo "Before UPX for $TARGETARCH" && \
+    ls -lh /g/backend/* && \
+    upx --best --lzma /g/backend/server && \
+    echo "After UPX for $TARGETARCH" && \
+    ls -lh /g/backend/*
+
 FROM node:18-slim as ui
 
 ARG MAKEARGS
@@ -29,9 +38,21 @@ RUN npm i && npm run build
 
 FROM ossrs/srs:ubuntu20 as ffmpeg
 
+# Use UPX to compress the binary.
+# https://serverfault.com/questions/949991/how-to-install-tzdata-on-a-ubuntu-docker-image
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -y && apt-get install -y upx
+
+RUN echo "Before UPX for $TARGETARCH" && \
+    ls -lh /usr/local/bin/* && \
+    upx --best --lzma /usr/local/bin/ffmpeg && \
+    upx --best --lzma /usr/local/bin/ffprobe && \
+    echo "After UPX for $TARGETARCH" && \
+    ls -lh /usr/local/bin/*
+
 FROM ubuntu:focal as dist
 
-COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
+COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/
 COPY --from=build /g/backend/*.aac /g/backend/*.mp3 /g/backend/*.opus /g/backend/server /g/backend/
 COPY --from=ui /g/build /g/build
 

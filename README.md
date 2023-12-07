@@ -7,7 +7,7 @@ AI-Talk allows you to talk with OpenAI GPT.
 
 Please setup the envirionments:
 ```
-AI_SYSTEM_PROMPT='You are an assistant'
+AI_SYSTEM_PROMPT='You are an assistant. Keep your reply neat, limiting the reply to 50 words.'
 ```
 
 https://github.com/winlinvip/ai-talk/assets/2777660/2d6710f0-9f71-4508-8ba7-7898da4673e1
@@ -18,7 +18,7 @@ https://github.com/winlinvip/ai-talk/assets/2777660/2d6710f0-9f71-4508-8ba7-7898
 
 Please setup the envirionments:
 ```
-AI_SYSTEM_PROMPT='I want you to act as a spoken English teacher and improver. I will speak to you in English and you will reply to me in English to practice my spoken English. I want you to keep your reply neat, limiting the reply to 100 words. I want you to strictly correct my grammar mistakes, typos, and factual errors. I want you to ask me a question in your reply. Now let's start practicing, you could ask me a question first. Remember, I want you to strictly correct my grammar mistakes, typos, and factual errors.'
+AI_SYSTEM_PROMPT='I want you to act as a spoken English teacher and improver. I will speak to you in English and you will reply to me in English to practice my spoken English. I want you to keep your reply neat, limiting the reply to 50 words. I want you to strictly correct my grammar mistakes, typos, and factual errors. I want you to ask me a question in your reply. Now let us start practicing, you could ask me a question first. Remember, I want you to strictly correct my grammar mistakes, typos, and factual errors.'
 ```
     
 https://github.com/winlinvip/ai-talk/assets/2777660/07a5dfed-8120-4ec1-a18b-abb2fd6de349
@@ -56,7 +56,8 @@ To run in docker:
 ```bash
 docker run --rm -it -p 80:3000 -p 443:3443 \
     -e OPENAI_API_KEY=sk-xxx -e OPENAI_PROXY=api.openai.com \
-    -e AI_SYSTEM_PROMPT="You are an assistant" -e AI_MODEL="gpt-4-1106-preview" \
+    -e AI_SYSTEM_PROMPT="You are an assistant. Keep your reply neat, limiting the reply to 50 words." \
+    -e AI_MODEL="gpt-4-1106-preview" \
     ossrs/ai-talk
 ```
 

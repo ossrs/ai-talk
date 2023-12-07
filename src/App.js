@@ -61,22 +61,20 @@ function App() {
   const ref = React.useRef({
     mediaRecorder: null,
     audioChunks: [],
-    longLogs: [],
-    shortLogs: [],
+    verboseLogs: [],
+    infoLogs: [],
   });
-  React.useEffect(() => {
-    ref.current.longLogs = verboseLogs;
-    ref.current.shortLogs = infoLogs;
-  }, [ref, verboseLogs, infoLogs]);
 
   // Write a summary or info log, which is important but short message for user.
   const info = React.useCallback((msg) => {
-    setInfoLogs([buildLog(msg), ...ref.current.shortLogs]);
+    ref.current.infoLogs = [msg, ...ref.current.infoLogs];
+    setInfoLogs(ref.current.infoLogs);
   }, [ref, setInfoLogs]);
 
   // Write a verbose or detail log, which is very detail for debugging for developer.
   const verbose = React.useCallback((msg) => {
-    setVerboseLogs([buildLog(msg), ...ref.current.longLogs]);
+    ref.current.verboseLogs = [buildLog(msg), ...ref.current.verboseLogs];
+    setVerboseLogs(ref.current.verboseLogs);
   }, [ref, setVerboseLogs]);
 
   // Setup the website title.
@@ -118,9 +116,9 @@ function App() {
     try {
       setStarting(true);
       verbose("Start the app");
-      info("Start the app");
 
       await new Promise(resolve => {
+        verbose(`Start: Play hello welcome audio`);
         playerRef.current.src = "/api/ai-talk/examples/hello.aac";
         playerRef.current.play()
           .catch(error => alert(`Play error: ${error}`));
@@ -129,10 +127,26 @@ function App() {
         });
       });
 
+      const stageUUID = await new Promise((resolve, reject) => {
+        verbose(`Start: Create a new stage`);
+
+        fetch('/api/ai-talk/start/', {
+          method: 'POST',
+        }).then(response => {
+          return response.json();
+        }).then((data) => {
+          verbose(`Start: Create stage success: ${data.data.sid}`);
+          resolve(data.data.sid);
+        }).catch((error) => reject(error));
+      });
+
       const stream = await new Promise(resolve => {
+        verbose(`Start: Open microphone`);
+
         navigator.mediaDevices.getUserMedia(
           {audio: true}
         ).then((stream) => {
+          verbose(`Start: Microphone opened, try to record`);
           const recorder = new MediaRecorder(stream);
 
           const audioChunks = [];
@@ -140,14 +154,14 @@ function App() {
             audioChunks.push(data);
           });
           recorder.addEventListener("stop", async () => {
-            verbose(`Start: Microphone stop, chunks=${audioChunks.length}, state=${recorder.state}`);
+            verbose(`Start: Microphone ok, chunks=${audioChunks.length}, state=${recorder.state}`);
             resolve(stream);
           });
 
           recorder.start();
           setTimeout(() => {
             recorder.stop();
-            verbose(`Start: Microphone state is ${recorder.state}`);
+            verbose(`Start: Microphone stopping, state is ${recorder.state}`);
           }, 100);
         }).catch(error => alert(`Open microphone error: ${error}`));
       });
@@ -160,6 +174,8 @@ function App() {
       });
 
       setStarted(true);
+      info(`Stage started, AI is ready`);
+      verbose(`Stage started, AI is ready, sid=${stageUUID}`);
     } finally {
       setStarting(false);
     }
@@ -337,9 +353,9 @@ function App() {
       }}>{!showVerboseLogs ? 'Detail logs' : 'Less logs'}</button> &nbsp;
       <button onClick={(e) => {
         verbose(`Play example aac audio`);
-        playerRef.current.src = "/api/ai-talk/examples/example.aac";
+        playerRef.current.src = "/api/ai-talk/examples/hello.aac";
         playerRef.current.play();
-      }}>Example audio</button> &nbsp;
+      }}>Welcome audio</button> &nbsp;
     </p>
     <ul className='LogPanel'>
       {showVerboseLogs && verboseLogs.map((log, index) => {

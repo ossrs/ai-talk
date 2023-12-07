@@ -226,6 +226,11 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
 
 // When user start a scenario or stage, response a stage object, which identified by sid or stage id.
 func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	ohttp.WriteData(ctx, w, r, struct {
+		StageID string `json:"sid"`
+	}{
+		StageID: uuid.NewString(),
+	})
 	return nil
 }
 
@@ -279,15 +284,25 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 			// Determine whether new sentence by length.
 			if isEnglish(sentence) {
-				if nn := strings.Count(sentence, " "); nn >= 30 {
+				maxWords, minWords := 30, 3
+				if !firstSentense {
+					maxWords, minWords = 50, 10
+				}
+
+				if nn := strings.Count(sentence, " "); nn >= maxWords {
 					newSentence = true
-				} else if nn < 3 {
+				} else if nn < minWords {
 					newSentence = false
 				}
 			} else {
-				if nn := utf8.RuneCount([]byte(sentence)); nn >= 50 {
+				maxWords, minWords := 50, 3
+				if !firstSentense {
+					maxWords, minWords = 100, 10
+				}
+
+				if nn := utf8.RuneCount([]byte(sentence)); nn >= maxWords {
 					newSentence = true
-				} else if nn < 3 {
+				} else if nn < minWords {
 					newSentence = false
 				}
 			}
@@ -608,7 +623,7 @@ func doMain(ctx context.Context) error {
 	setEnvDefault("PROXY_STATIC", "true")
 	setEnvDefault("AI_NO_PADDING", "true")
 	setEnvDefault("AI_PADDING_TEXT", "My answer is ")
-	setEnvDefault("AI_SYSTEM_PROMPT", "You are a helpful assistant.")
+	setEnvDefault("AI_SYSTEM_PROMPT", "You are an assistant. Keep your reply neat, limiting the reply to 50 words.")
 	setEnvDefault("AI_MODEL", openai.GPT4TurboPreview)
 	setEnvDefault("AI_MAX_TOKENS", "1024")
 	setEnvDefault("AI_TEMPERATURE", "0.9")

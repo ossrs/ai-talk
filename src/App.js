@@ -33,6 +33,7 @@ function App() {
   const mediaRecorderRef = React.useRef(null);
   const audioChunkRef = React.useRef([]);
   const [started, setStarted] = React.useState(false);
+  const [starting, setStarting] = React.useState(false);
   const audioPlayerRef = React.useRef(null);
   const isMobile = useIsMobile();
   const isOssrsNet = useIsOssrsNet();
@@ -218,49 +219,54 @@ function App() {
   }, [writeLongLog, writeShortLog, setBtnClassName, mediaRecorderRef, audioChunkRef, setLoading, audioPlayerRef]);
 
   const onStart = React.useCallback(async () => {
-    writeLongLog("Start the app");
-    writeShortLog("Start the app");
+    try {
+      setStarting(true);
+      writeLongLog("Start the app");
+      writeShortLog("Start the app");
 
-    await new Promise(resolve => {
-      audioPlayerRef.current.src = "/api/ai-talk/examples/hello.aac";
-      audioPlayerRef.current.play()
-        .catch(error => alert(`Play error: ${error}`));
-      audioPlayerRef.current.addEventListener('ended', () => {
-        resolve();
+      await new Promise(resolve => {
+        audioPlayerRef.current.src = "/api/ai-talk/examples/hello.aac";
+        audioPlayerRef.current.play()
+          .catch(error => alert(`Play error: ${error}`));
+        audioPlayerRef.current.addEventListener('ended', () => {
+          resolve();
+        });
       });
-    });
 
-    const stream = await new Promise(resolve => {
-      navigator.mediaDevices.getUserMedia(
-        {audio: true}
-      ).then((stream) => {
-        const recorder = new MediaRecorder(stream);
+      const stream = await new Promise(resolve => {
+        navigator.mediaDevices.getUserMedia(
+          {audio: true}
+        ).then((stream) => {
+          const recorder = new MediaRecorder(stream);
 
-        const audioChunks = [];
-        recorder.addEventListener("dataavailable", ({data}) => {
-          audioChunks.push(data);
-        });
-        recorder.addEventListener("stop", async () => {
-          writeLongLog(`Start: Microphone stop, chunks=${audioChunks.length}, state=${recorder.state}`);
-          resolve(stream);
-        });
+          const audioChunks = [];
+          recorder.addEventListener("dataavailable", ({data}) => {
+            audioChunks.push(data);
+          });
+          recorder.addEventListener("stop", async () => {
+            writeLongLog(`Start: Microphone stop, chunks=${audioChunks.length}, state=${recorder.state}`);
+            resolve(stream);
+          });
 
-        recorder.start();
+          recorder.start();
+          setTimeout(() => {
+            recorder.stop();
+            writeLongLog(`Start: Microphone state is ${recorder.state}`);
+          }, 100);
+        }).catch(error => alert(`Open microphone error: ${error}`));
+      });
+
+      await new Promise(resolve => {
+        stream.getTracks().forEach(track => track.stop());
         setTimeout(() => {
-          recorder.stop();
-          writeLongLog(`Start: Microphone state is ${recorder.state}`);
-        }, 100);
-      }).catch(error => alert(`Open microphone error: ${error}`));
-    });
+          resolve();
+        }, 200);
+      });
 
-    await new Promise(resolve => {
-      stream.getTracks().forEach(track => track.stop());
-      setTimeout(() => {
-        resolve();
-      }, 200);
-    });
-
-    setStarted(true);
+      setStarted(true);
+    } finally {
+      setStarting(false);
+    }
   }, [writeLongLog, writeShortLog, setStarted, audioPlayerRef]);
 
   React.useEffect(() => {
@@ -291,8 +297,9 @@ function App() {
 
   return (<div className="App">
     <header className="App-header">
-      {!started && <button className='StartButton' onClick={(e) => {
-        onStart();
+      {!started && <button
+        disabled={starting} className='StartButton' onClick={(e) => {
+          onStart();
       }}>Click to start</button>}
       {started && <button
         onTouchStart={(e) => {

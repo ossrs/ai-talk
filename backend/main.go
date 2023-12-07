@@ -208,7 +208,7 @@ func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 
 			ttsWorker.Remove(s.uuid)
 
-			if s.ttsFile != "" {
+			if s.ttsFile != "" && os.Getenv("KEEP_AUDIO_FILES") != "true" {
 				if _, err := os.Stat(s.ttsFile); err == nil {
 					os.Remove(s.ttsFile)
 				}
@@ -312,7 +312,9 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 
 	// We save the input audio to *.audio file, it can be aac or opus codec.
 	inputFile := path.Join(workDir, fmt.Sprintf("%v-input.audio", rid))
-	defer os.Remove(inputFile)
+	if os.Getenv("KEEP_AUDIO_FILES") != "true" {
+		defer os.Remove(inputFile)
+	}
 	if err := func() error {
 		r.ParseMultipartForm(20 * 1024 * 1024)
 		file, _, err := r.FormFile("file")
@@ -339,7 +341,9 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	}
 
 	outputFile := path.Join(workDir, fmt.Sprintf("%v-input.m4a", rid))
-	defer os.Remove(outputFile)
+	if os.Getenv("KEEP_AUDIO_FILES") != "true" {
+		defer os.Remove(outputFile)
+	}
 	if true {
 		err := exec.CommandContext(ctx, "ffmpeg",
 			"-i", inputFile,
@@ -600,7 +604,7 @@ func doMain(ctx context.Context) error {
 
 	// Load env variables from file.
 	if _, err := os.Stat("../.env"); err == nil {
-		if err := godotenv.Overload("../.env"); err != nil {
+		if err := godotenv.Load("../.env"); err != nil {
 			return errors.Wrapf(err, "load env")
 		}
 	} else {
@@ -608,6 +612,26 @@ func doMain(ctx context.Context) error {
 			return errors.Wrapf(err, "not found .env")
 		}
 	}
+
+	setEnvDefault("OPENAI_PROXY", "api.openai.com")
+	setEnvDefault("HTTP_LISTEN", "3001")
+	setEnvDefault("HTTPS_LISTEN", "3443")
+	setEnvDefault("PROXY_STATIC", "true")
+	setEnvDefault("AI_NO_PADDING", "true")
+	setEnvDefault("AI_PADDING_TEXT", "My answer is ")
+	setEnvDefault("AI_SYSTEM_PROMPT", "You are a helpful assistant.")
+	setEnvDefault("AI_MODEL", openai.GPT4TurboPreview)
+	setEnvDefault("AI_MAX_TOKENS", "1024")
+	setEnvDefault("AI_TEMPERATURE", "0.9")
+	setEnvDefault("KEEP_AUDIO_FILES", "false")
+	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, HTTP_LISTEN=%v, HTTPS_LISTEN=%v, PROXY_STATIC=%v, "+
+		"AI_NO_PADDING=%v, AI_PADDING_TEXT=%v, AI_SYSTEM_PROMPT=%v, AI_MODEL=%v, AI_MAX_TOKENS=%v, AI_TEMPERATURE=%v, "+
+		"KEEP_AUDIO_FILES=%v",
+		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("HTTP_LISTEN"),
+		os.Getenv("HTTPS_LISTEN"), os.Getenv("PROXY_STATIC"), os.Getenv("AI_NO_PADDING"),
+		os.Getenv("AI_PADDING_TEXT"), os.Getenv("AI_SYSTEM_PROMPT"), os.Getenv("AI_MODEL"),
+		os.Getenv("AI_MAX_TOKENS"), os.Getenv("AI_TEMPERATURE"), os.Getenv("KEEP_AUDIO_FILES"),
+	)
 
 	// Initialize OpenAI client config.
 	aiConfig = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
@@ -817,18 +841,6 @@ func doMain(ctx context.Context) error {
 
 func main() {
 	ctx := context.Background()
-
-	setEnvDefault("OPENAI_PROXY", "api.openai.com")
-	setEnvDefault("HTTP_LISTEN", "3001")
-	setEnvDefault("HTTPS_LISTEN", "3443")
-	setEnvDefault("PROXY_STATIC", "true")
-	setEnvDefault("AI_NO_PADDING", "false")
-	setEnvDefault("AI_PADDING_TEXT", "My answer is ")
-	setEnvDefault("AI_SYSTEM_PROMPT", "You are a helpful assistant.")
-	setEnvDefault("AI_MODEL", openai.GPT4TurboPreview)
-	setEnvDefault("AI_MAX_TOKENS", "1024")
-	setEnvDefault("AI_TEMPERATURE", "0.9")
-
 	if err := doMain(ctx); err != nil {
 		logger.Ef(ctx, "Main error: %+v", err)
 		os.Exit(-1)

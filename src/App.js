@@ -62,138 +62,148 @@ function App() {
     writeLongLog('App started');
   }, [writeLongLog]);
 
-  const startRecording = React.useCallback(() => {
+  const startRecording = React.useCallback(async () => {
     if (mediaRecorderRef.current) return;
 
     setBtnClassName('DynamicButton');
     writeLongLog("===========================");
     writeShortLog("=============");
 
-    navigator.mediaDevices.getUserMedia(
-      { audio: true }
-    ).then((stream) => {
-      // See https://www.sitelint.com/lab/media-recorder-supported-mime-type/
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      mediaRecorderRef.current.addEventListener("dataavailable", ({ data }) => {
-        audioChunkRef.current.push(data);
-        writeLongLog(`Event: dataavailable ${data.size} bytes`);
-      });
-      mediaRecorderRef.current.start();
-      writeLongLog(`Event: Recording started`);
-    }).catch(error => alert(`Record error: ${error}`));
+    const stream = await new Promise(resolve => {
+      navigator.mediaDevices.getUserMedia(
+        { audio: true }
+      ).then((stream) => {
+        resolve(stream);
+      }).catch(error => alert(`Device error: ${error}`));
+    });
+
+    // See https://www.sitelint.com/lab/media-recorder-supported-mime-type/
+    mediaRecorderRef.current = new MediaRecorder(stream);
+    mediaRecorderRef.current.addEventListener("dataavailable", ({ data }) => {
+      audioChunkRef.current.push(data);
+      writeLongLog(`Event: dataavailable ${data.size} bytes`);
+    });
+
+    mediaRecorderRef.current.start();
+    writeLongLog(`Event: Recording started`);
   }, [writeLongLog, writeShortLog, setBtnClassName, mediaRecorderRef, audioChunkRef]);
 
-  const stopRecording = React.useCallback(() => {
+  const stopRecording = React.useCallback(async () => {
     if (!mediaRecorderRef.current) return;
 
-    mediaRecorderRef.current.addEventListener("stop", async () => {
-      writeLongLog(`Event: stopping, ${audioChunkRef.current.length} chunks`);
+    await new Promise(resolve => {
+      mediaRecorderRef.current.addEventListener("stop", () => {
+        const stream = mediaRecorderRef.current.stream;
+        stream.getTracks().forEach(track => track.stop());
+        setTimeout(resolve, 300);
+      });
 
-      setLoading(true);
+      writeLongLog(`Event: Recorder stop, chunks=${audioChunkRef.current.length}, state=${mediaRecorderRef.current.state}`);
+      mediaRecorderRef.current.stop();
+    });
 
-      try {
-        // Upload the user input audio to the server.
-        const uuid = await new Promise((resolve, reject) => {
-          writeLongLog(`ASR: Uploading ${audioChunkRef.current.length} chunks`);
-          const audioBlob = new Blob(audioChunkRef.current);
-          audioChunkRef.current = [];
+    setLoading(true);
+    writeLongLog(`Event: Recoder stopped, chunks=${audioChunkRef.current.length}`);
 
-          // It can be aac or ogg codec.
-          const formData = new FormData();
-          formData.append('file', audioBlob, 'input.audio');
+    try {
+      // Upload the user input audio to the server.
+      const uuid = await new Promise((resolve, reject) => {
+        writeLongLog(`ASR: Uploading ${audioChunkRef.current.length} chunks`);
+        const audioBlob = new Blob(audioChunkRef.current);
+        audioChunkRef.current = [];
 
-          fetch('/api/ai-talk/upload/', {
-            method: 'POST',
-            body: formData,
-          }).then(response => {
-            return response.json();
-          }).then((data) => {
-            writeLongLog(`ASR: Upload success: ${data.data.uuid} ${data.data.asr}`);
-            writeShortLog(`You: ${data.data.asr}`);
-            resolve(data.data.uuid);
-          }).catch((error) => reject(error));
-        });
+        // It can be aac or ogg codec.
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'input.audio');
 
-        // Get the AI generated audio from the server.
-        while (true) {
-          writeLongLog(`TTS: Requesting ${uuid} response audios`);
-          let readyUUID = null;
-          while (!readyUUID) {
-            const resp = await new Promise((resolve, reject) => {
-              fetch(`/api/ai-talk/question/?rid=${uuid}`, {
-                method: 'POST',
-              }).then(response => {
-                return response.json();
-              }).then((data) => {
-                if (data?.data?.uuid) {
-                  writeLongLog(`TTS: Audio ready: ${data.data.uuid} ${data.data.tts}`);
-                  writeShortLog(`Bot: ${data.data.tts}`);
-                }
-                resolve(data.data);
-              }).catch(error => reject(error));
-            });
+        fetch('/api/ai-talk/upload/', {
+          method: 'POST',
+          body: formData,
+        }).then(response => {
+          return response.json();
+        }).then((data) => {
+          writeLongLog(`ASR: Upload success: ${data.data.uuid} ${data.data.asr}`);
+          writeShortLog(`You: ${data.data.asr}`);
+          resolve(data.data.uuid);
+        }).catch((error) => reject(error));
+      });
 
-            if (!resp.uuid) {
-              break;
-            }
-
-            if (resp.processing) {
-              await new Promise((resolve) => setTimeout(resolve, 300));
-              continue;
-            }
-
-            readyUUID = resp.uuid;
-          }
-
-          // All audios are played.
-          if (!readyUUID) {
-            writeLongLog(`TTS: All audios are played.`);
-            writeLongLog("===========================");
-            break;
-          }
-
-          // Play the AI generated audio.
-          await new Promise(resolve => {
-            const url = `/api/ai-talk/tts/?rid=${uuid}&uuid=${readyUUID}`;
-            writeLongLog(`TTS: Playing ${url}`);
-
-            const listener = () => {
-              audioPlayerRef.current.removeEventListener('ended', listener);
-              writeLongLog(`TTS: Played ${url} done.`);
-              resolve();
-            };
-            audioPlayerRef.current.addEventListener('ended', listener);
-
-            audioPlayerRef.current.src = url;
-            audioPlayerRef.current.play().catch(error => {
-              writeLongLog(`TTS: Play ${url} failed: ${error}`);
-              resolve();
-            });
-          });
-
-          // Remove the AI generated audio.
-          await new Promise((resolve, reject) => {
-            fetch(`/api/ai-talk/remove/?rid=${uuid}&uuid=${readyUUID}`, {
+      // Get the AI generated audio from the server.
+      while (true) {
+        writeLongLog(`TTS: Requesting ${uuid} response audios`);
+        let readyUUID = null;
+        while (!readyUUID) {
+          const resp = await new Promise((resolve, reject) => {
+            fetch(`/api/ai-talk/question/?rid=${uuid}`, {
               method: 'POST',
             }).then(response => {
               return response.json();
             }).then((data) => {
-              writeLongLog(`TTS: Audio removed: ${readyUUID}`);
-              resolve();
+              if (data?.data?.uuid) {
+                writeLongLog(`TTS: Audio ready: ${data.data.uuid} ${data.data.tts}`);
+                writeShortLog(`Bot: ${data.data.tts}`);
+              }
+              resolve(data.data);
             }).catch(error => reject(error));
           });
-        }
-      } catch (e) {
-        alert(e);
-      } finally {
-        setLoading(false);
-        setBtnClassName('StaticButton');
-      }
-    });
 
-    writeLongLog(`Event: stop, ${audioChunkRef.current.length} chunks`);
-    mediaRecorderRef.current.stop();
-    mediaRecorderRef.current = null;
+          if (!resp.uuid) {
+            break;
+          }
+
+          if (resp.processing) {
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            continue;
+          }
+
+          readyUUID = resp.uuid;
+        }
+
+        // All audios are played.
+        if (!readyUUID) {
+          writeLongLog(`TTS: All audios are played.`);
+          writeLongLog("===========================");
+          break;
+        }
+
+        // Play the AI generated audio.
+        await new Promise(resolve => {
+          const url = `/api/ai-talk/tts/?rid=${uuid}&uuid=${readyUUID}`;
+          writeLongLog(`TTS: Playing ${url}`);
+
+          const listener = () => {
+            audioPlayerRef.current.removeEventListener('ended', listener);
+            writeLongLog(`TTS: Played ${url} done.`);
+            resolve();
+          };
+          audioPlayerRef.current.addEventListener('ended', listener);
+
+          audioPlayerRef.current.src = url;
+          audioPlayerRef.current.play().catch(error => {
+            writeLongLog(`TTS: Play ${url} failed: ${error}`);
+            resolve();
+          });
+        });
+
+        // Remove the AI generated audio.
+        await new Promise((resolve, reject) => {
+          fetch(`/api/ai-talk/remove/?rid=${uuid}&uuid=${readyUUID}`, {
+            method: 'POST',
+          }).then(response => {
+            return response.json();
+          }).then((data) => {
+            writeLongLog(`TTS: Audio removed: ${readyUUID}`);
+            resolve();
+          }).catch(error => reject(error));
+        });
+      }
+    } catch (e) {
+      alert(e);
+    } finally {
+      setLoading(false);
+      setBtnClassName('StaticButton');
+      mediaRecorderRef.current = null;
+    }
   }, [writeLongLog, writeShortLog, setBtnClassName, mediaRecorderRef, audioChunkRef, setLoading, audioPlayerRef]);
 
   const onStart = React.useCallback(async () => {
@@ -209,28 +219,37 @@ function App() {
       });
     });
 
-    await new Promise(resolve => {
+    const stream = await new Promise(resolve => {
       navigator.mediaDevices.getUserMedia(
         {audio: true}
       ).then((stream) => {
         const recorder = new MediaRecorder(stream);
+
         const audioChunks = [];
         recorder.addEventListener("dataavailable", ({data}) => {
           audioChunks.push(data);
         });
         recorder.addEventListener("stop", async () => {
-          writeLongLog(`Start: Microphone ${audioChunks.length} chunks`);
-          resolve();
+          writeLongLog(`Start: Microphone stop, chunks=${audioChunks.length}, state=${recorder.state}`);
+          resolve(stream);
         });
-        recorder.start();
 
+        recorder.start();
         setTimeout(() => {
           recorder.stop();
-        }, 500);
+          writeLongLog(`Start: Microphone state is ${recorder.state}`);
+        }, 200);
       }).catch(error => alert(`Open microphone error: ${error}`));
-
-      setStarted(true);
     });
+
+    await new Promise(resolve => {
+      stream.getTracks().forEach(track => track.stop());
+      setTimeout(() => {
+        resolve();
+      }, 500);
+    });
+
+    setStarted(true);
   }, [writeLongLog, writeShortLog, setStarted, audioPlayerRef]);
 
   React.useEffect(() => {

@@ -19,6 +19,11 @@
   text-align: left;
 }
 
+.LogGif {
+  height: 0px;
+  width: 0px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .DynamicButton {
     animation: App-logo-spin infinite 20s linear;

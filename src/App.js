@@ -325,7 +325,7 @@ function App() {
         return (<li key={index}>{log}</li>);
       })}
     </ul>
-    {isOssrsNet && <img src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk"/>}
+    {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk"/>}
   </div>);
 }
 

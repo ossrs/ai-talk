@@ -119,7 +119,7 @@ function App() {
 
     try {
       // Upload the user input audio to the server.
-      const uuid = await new Promise((resolve, reject) => {
+      const requestUUID = await new Promise((resolve, reject) => {
         writeLongLog(`ASR: Uploading ${audioChunkRef.current.length} chunks`);
         const audioBlob = new Blob(audioChunkRef.current);
         audioChunkRef.current = [];
@@ -134,32 +134,32 @@ function App() {
         }).then(response => {
           return response.json();
         }).then((data) => {
-          writeLongLog(`ASR: Upload success: ${data.data.uuid} ${data.data.asr}`);
+          writeLongLog(`ASR: Upload success: ${data.data.rid} ${data.data.asr}`);
           writeShortLog(`You: ${data.data.asr}`);
-          resolve(data.data.uuid);
+          resolve(data.data.rid);
         }).catch((error) => reject(error));
       });
 
       // Get the AI generated audio from the server.
       while (true) {
-        writeLongLog(`TTS: Requesting ${uuid} response audios`);
-        let readyUUID = null;
-        while (!readyUUID) {
+        writeLongLog(`TTS: Requesting ${requestUUID} response audios`);
+        let audioSegmentUUID = null;
+        while (!audioSegmentUUID) {
           const resp = await new Promise((resolve, reject) => {
-            fetch(`/api/ai-talk/question/?rid=${uuid}`, {
+            fetch(`/api/ai-talk/question/?rid=${requestUUID}`, {
               method: 'POST',
             }).then(response => {
               return response.json();
             }).then((data) => {
-              if (data?.data?.uuid) {
-                writeLongLog(`TTS: Audio ready: ${data.data.uuid} ${data.data.tts}`);
+              if (data?.data?.asid) {
+                writeLongLog(`TTS: Audio ready: ${data.data.asid} ${data.data.tts}`);
                 writeShortLog(`Bot: ${data.data.tts}`);
               }
               resolve(data.data);
             }).catch(error => reject(error));
           });
 
-          if (!resp.uuid) {
+          if (!resp.asid) {
             break;
           }
 
@@ -168,11 +168,11 @@ function App() {
             continue;
           }
 
-          readyUUID = resp.uuid;
+          audioSegmentUUID = resp.asid;
         }
 
         // All audios are played.
-        if (!readyUUID) {
+        if (!audioSegmentUUID) {
           writeLongLog(`TTS: All audios are played.`);
           writeLongLog("===========================");
           break;
@@ -180,7 +180,7 @@ function App() {
 
         // Play the AI generated audio.
         await new Promise(resolve => {
-          const url = `/api/ai-talk/tts/?rid=${uuid}&uuid=${readyUUID}`;
+          const url = `/api/ai-talk/tts/?rid=${requestUUID}&asid=${audioSegmentUUID}`;
           writeLongLog(`TTS: Playing ${url}`);
 
           const listener = () => {
@@ -199,12 +199,12 @@ function App() {
 
         // Remove the AI generated audio.
         await new Promise((resolve, reject) => {
-          fetch(`/api/ai-talk/remove/?rid=${uuid}&uuid=${readyUUID}`, {
+          fetch(`/api/ai-talk/remove/?rid=${requestUUID}&asid=${audioSegmentUUID}`, {
             method: 'POST',
           }).then(response => {
             return response.json();
           }).then((data) => {
-            writeLongLog(`TTS: Audio removed: ${readyUUID}`);
+            writeLongLog(`TTS: Audio removed: ${audioSegmentUUID}`);
             resolve();
           }).catch(error => reject(error));
         });
@@ -318,11 +318,12 @@ function App() {
     <p>
       <button onClick={(e) => {
         setShowShortLogs(!showShortLogs);
-      }}>{showShortLogs ? 'Detail Logs' : 'Short Logs'}</button> &nbsp;
+      }}>{showShortLogs ? 'Detail logs' : 'Less logs'}</button> &nbsp;
       <button onClick={(e) => {
+        writeLongLog(`Play example aac audio`);
         audioPlayerRef.current.src = "/api/ai-talk/examples/example.aac";
         audioPlayerRef.current.play();
-      }}>Example aac</button> &nbsp;
+      }}>Example audio</button> &nbsp;
     </p>
     <ul className='LogPanel'>
       {!showShortLogs && longLogRenders.map((log, index) => {

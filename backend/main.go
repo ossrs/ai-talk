@@ -42,29 +42,31 @@ var histories []openai.ChatCompletionMessage
 var aiConfig openai.ClientConfig
 var workDir string
 
-type TTSStencense struct {
+// The AnswerSegment is a segment of answer, which is a sentence.
+type AnswerSegment struct {
 	// Request UUID.
 	rid string
-	// Sentence UUID.
-	uuid string
-	// Sentence text.
-	sentence string
+	// Answer segment UUID.
+	asid string
+	// The text of this answer segment.
+	text string
 	// The TTS file path.
 	ttsFile string
 	// Whether TTS is done, ready to play.
 	ready bool
-	// Whether TTS is error, sentence failed.
+	// Whether TTS is error, failed.
 	err error
-	// Whether dummy sentence, to identify the request is alive.
+	// Whether dummy segment, to identify the request is alive.
 	dummy bool
 	// Signal to remove the TTS file immediately.
 	removeSignal chan bool
 }
 
+// The TTSWorker is a worker to convert answers from text to audio.
 type TTSWorker struct {
-	sentences []*TTSStencense
-	lock      sync.Mutex
-	wg        sync.WaitGroup
+	segments []*AnswerSegment
+	lock     sync.Mutex
+	wg       sync.WaitGroup
 }
 
 func (v *TTSWorker) Close() error {
@@ -72,12 +74,12 @@ func (v *TTSWorker) Close() error {
 	return nil
 }
 
-func (v *TTSWorker) QueryTTS(requestUUID, uuid string) *TTSStencense {
+func (v *TTSWorker) QuerySegment(rid, asid string) *AnswerSegment {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
-	for _, s := range v.sentences {
-		if s.rid == requestUUID && s.uuid == uuid {
+	for _, s := range v.segments {
+		if s.rid == rid && s.asid == asid {
 			return s
 		}
 	}
@@ -85,15 +87,15 @@ func (v *TTSWorker) QueryTTS(requestUUID, uuid string) *TTSStencense {
 	return nil
 }
 
-func (v *TTSWorker) QueryReady(ctx context.Context, requestUUID string) *TTSStencense {
+func (v *TTSWorker) QueryAnyReadySegment(ctx context.Context, rid string) *AnswerSegment {
 	for ctx.Err() == nil {
-		var s *TTSStencense
+		var s *AnswerSegment
 
-		// When there is no stencense, maybe AI is generating the sentence, we need to wait. For example,
+		// When there is no segments, maybe AI is generating the sentence, we need to wait. For example,
 		// if the first sentence is very short, maybe we got it quickly, but the second sentence is very
 		// long so that the AI need more time to generate it.
 		for i := 0; i < 10 && s == nil; i++ {
-			if s = v.Query(requestUUID); s == nil {
+			if s = v.query(rid); s == nil {
 				select {
 				case <-ctx.Done():
 				case <-time.After(200 * time.Millisecond):
@@ -118,12 +120,12 @@ func (v *TTSWorker) QueryReady(ctx context.Context, requestUUID string) *TTSSten
 	return nil
 }
 
-func (v *TTSWorker) Query(requestUUID string) *TTSStencense {
+func (v *TTSWorker) query(rid string) *AnswerSegment {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
-	for _, s := range v.sentences {
-		if s.rid == requestUUID {
+	for _, s := range v.segments {
+		if s.rid == rid {
 			return s
 		}
 	}
@@ -131,30 +133,35 @@ func (v *TTSWorker) Query(requestUUID string) *TTSStencense {
 	return nil
 }
 
-func (v *TTSWorker) Remove(uuid string) {
+func (v *TTSWorker) RemoveSegment(asid string) {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
-	for i, s := range v.sentences {
-		if s.uuid == uuid {
-			v.sentences = append(v.sentences[:i], v.sentences[i+1:]...)
+	for i, s := range v.segments {
+		if s.asid == asid {
+			v.segments = append(v.segments[:i], v.segments[i+1:]...)
 			return
 		}
 	}
 }
 
-func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
+func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
 	// Append the sentence to queue.
 	func() {
 		v.lock.Lock()
 		defer v.lock.Unlock()
 
-		v.sentences = append(v.sentences, s)
+		v.segments = append(v.segments, segment)
 	}()
 
+	// Ignore the dummy sentence.
+	if segment.dummy {
+		return
+	}
+
 	// Now that we have a real sentence, we should remove the dummy sentence.
-	if dummy := v.Query(s.rid); dummy != nil && dummy.dummy && dummy.uuid != s.uuid {
-		v.Remove(dummy.uuid)
+	if dummy := v.query(segment.rid); dummy != nil && dummy.dummy {
+		v.RemoveSegment(dummy.asid)
 	}
 
 	// Start a goroutine to do TTS task.
@@ -166,7 +173,7 @@ func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 			client := openai.NewClientWithConfig(aiConfig)
 			resp, err := client.CreateSpeech(ctx, openai.CreateSpeechRequest{
 				Model:          openai.TTSModel1,
-				Input:          s.sentence,
+				Input:          segment.text,
 				Voice:          openai.VoiceNova,
 				ResponseFormat: openai.SpeechResponseFormatAac,
 			})
@@ -175,9 +182,9 @@ func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 			}
 			defer resp.Close()
 
-			out, err := os.Create(s.ttsFile)
+			out, err := os.Create(segment.ttsFile)
 			if err != nil {
-				return errors.Errorf("Unable to create the file %v for writing", s.ttsFile)
+				return errors.Errorf("Unable to create the file %v for writing", segment.ttsFile)
 			}
 			defer out.Close()
 
@@ -186,11 +193,11 @@ func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 				return errors.Errorf("Error writing the file")
 			}
 
-			s.ready = true
-			logger.Tf(ctx, "File saved to %v, size: %v, %v", s.ttsFile, nn, s.sentence)
+			segment.ready = true
+			logger.Tf(ctx, "File saved to %v, size: %v, %v", segment.ttsFile, nn, segment.text)
 			return nil
 		}(); err != nil {
-			s.err = err
+			segment.err = err
 		}
 
 		// Start a goroutine to remove the sentence.
@@ -201,113 +208,119 @@ func (v *TTSWorker) Add(ctx context.Context, s *TTSStencense) {
 			select {
 			case <-ctx.Done():
 			case <-time.After(300 * time.Second):
-			case <-s.removeSignal:
+			case <-segment.removeSignal:
 			}
 
-			logger.Tf(ctx, "Remove %v %v", s.uuid, s.ttsFile)
+			logger.Tf(ctx, "Remove %v %v", segment.asid, segment.ttsFile)
 
-			ttsWorker.Remove(s.uuid)
+			ttsWorker.RemoveSegment(segment.asid)
 
-			if s.ttsFile != "" && os.Getenv("KEEP_AUDIO_FILES") != "true" {
-				if _, err := os.Stat(s.ttsFile); err == nil {
-					os.Remove(s.ttsFile)
+			if segment.ttsFile != "" && os.Getenv("KEEP_AUDIO_FILES") != "true" {
+				if _, err := os.Stat(segment.ttsFile); err == nil {
+					os.Remove(segment.ttsFile)
 				}
 			}
 		}()
 	}()
 }
 
-func handleStream(ctx context.Context, rid string, stream *openai.ChatCompletionStream) error {
-	var sentence string
-	var finished bool
-	firstSentense := true
-	for !finished && ctx.Err() == nil {
-		response, err := stream.Recv()
-		finished = errors_std.Is(err, io.EOF)
-		if err != nil && !finished {
-			return errors.Wrapf(err, "recv chat")
-		}
-
-		newSentence := false
-		if len(response.Choices) > 0 {
-			choice := response.Choices[0]
-			if dc := choice.Delta.Content; dc != "" {
-				filteredStencese := strings.ReplaceAll(dc, "\n\n", "\n")
-				filteredStencese = strings.ReplaceAll(filteredStencese, "\n", " ")
-				sentence += filteredStencese
-
-				// Any ASCII character to split sentence.
-				if strings.ContainsAny(dc, ",.?!\n") {
-					newSentence = true
-				}
-
-				// Any Chinese character to split sentence.
-				if strings.ContainsRune(dc, '。') ||
-					strings.ContainsRune(dc, '？') ||
-					strings.ContainsRune(dc, '！') {
-					newSentence = true
-				}
-			}
-		}
-
-		if sentence == "" {
-			continue
-		}
-
-		isEnglish := func(s string) bool {
-			for _, r := range s {
-				if r > unicode.MaxASCII {
-					return false
-				}
-			}
-			return true
-		}
-
-		// Determine whether new sentence by length.
-		if isEnglish(sentence) {
-			if nn := strings.Count(sentence, " "); nn >= 30 {
-				newSentence = true
-			} else if nn < 3 {
-				newSentence = false
-			}
-		} else {
-			if nn := utf8.RuneCount([]byte(sentence)); nn >= 50 {
-				newSentence = true
-			} else if nn < 3 {
-				newSentence = false
-			}
-		}
-
-		if finished || newSentence {
-			previousAssitant += sentence + " "
-
-			if firstSentense {
-				firstSentense = false
-				if os.Getenv("AI_NO_PADDING") != "true" {
-					sentence = fmt.Sprintf("%v%v", os.Getenv("AI_PADDING_TEXT"), sentence)
-				}
-			}
-
-			s := &TTSStencense{
-				rid:          rid,
-				uuid:         uuid.NewString(),
-				sentence:     sentence,
-				removeSignal: make(chan bool, 1),
-			}
-			s.ttsFile = path.Join(workDir, fmt.Sprintf("%v-sentence-%v-tts.aac", rid, s.uuid))
-			sentence = ""
-
-			ttsWorker.Add(ctx, s)
-		}
-	}
-
+// When user start a scenario, response a scenario object, which identified by sid or scenario id.
+func handleScenarioStart(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+// When user ask a question, which is a request with audio, which is identified by rid (request id).
+func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	handleChatResponseStream := func(ctx context.Context, rid string, gptChatStream *openai.ChatCompletionStream) error {
+		var sentence string
+		var finished bool
+		firstSentense := true
+		for !finished && ctx.Err() == nil {
+			response, err := gptChatStream.Recv()
+			finished = errors_std.Is(err, io.EOF)
+			if err != nil && !finished {
+				return errors.Wrapf(err, "recv chat")
+			}
+
+			newSentence := false
+			if len(response.Choices) > 0 {
+				choice := response.Choices[0]
+				if dc := choice.Delta.Content; dc != "" {
+					filteredStencese := strings.ReplaceAll(dc, "\n\n", "\n")
+					filteredStencese = strings.ReplaceAll(filteredStencese, "\n", " ")
+					sentence += filteredStencese
+
+					// Any ASCII character to split sentence.
+					if strings.ContainsAny(dc, ",.?!\n") {
+						newSentence = true
+					}
+
+					// Any Chinese character to split sentence.
+					if strings.ContainsRune(dc, '。') ||
+						strings.ContainsRune(dc, '？') ||
+						strings.ContainsRune(dc, '！') {
+						newSentence = true
+					}
+				}
+			}
+
+			if sentence == "" {
+				continue
+			}
+
+			isEnglish := func(s string) bool {
+				for _, r := range s {
+					if r > unicode.MaxASCII {
+						return false
+					}
+				}
+				return true
+			}
+
+			// Determine whether new sentence by length.
+			if isEnglish(sentence) {
+				if nn := strings.Count(sentence, " "); nn >= 30 {
+					newSentence = true
+				} else if nn < 3 {
+					newSentence = false
+				}
+			} else {
+				if nn := utf8.RuneCount([]byte(sentence)); nn >= 50 {
+					newSentence = true
+				} else if nn < 3 {
+					newSentence = false
+				}
+			}
+
+			if finished || newSentence {
+				previousAssitant += sentence + " "
+
+				if firstSentense {
+					firstSentense = false
+					if os.Getenv("AI_NO_PADDING") != "true" {
+						sentence = fmt.Sprintf("%v%v", os.Getenv("AI_PADDING_TEXT"), sentence)
+					}
+				}
+
+				s := &AnswerSegment{
+					rid:          rid,
+					asid:         uuid.NewString(),
+					text:         sentence,
+					removeSignal: make(chan bool, 1),
+				}
+				s.ttsFile = path.Join(workDir, fmt.Sprintf("%v-sentence-%v-tts.aac", rid, s.asid))
+				sentence = ""
+
+				ttsWorker.SubmitSegment(ctx, s)
+			}
+		}
+
+		return nil
+	}
+
 	ctx = logger.WithContext(ctx)
 
-	// For this request.
+	// The rid is the request id, which identify this request, generally a question.
 	rid := uuid.NewString()
 
 	// We save the input audio to *.audio file, it can be aac or opus codec.
@@ -428,7 +441,7 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	logger.Tf(ctx, "AI_MODEL: %v, AI_MAX_TOKENS: %v, AI_TEMPERATURE: %v",
 		model, maxTokens, temperature)
 
-	stream, err := client.CreateChatCompletionStream(
+	gptChatStream, err := client.CreateChatCompletionStream(
 		ctx, openai.ChatCompletionRequest{
 			Model:       model,
 			Messages:    messages,
@@ -442,148 +455,117 @@ func handleAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	}
 
 	// Insert a dummy sentence to identify the request is alive.
-	ttsWorker.Add(ctx, &TTSStencense{
+	ttsWorker.SubmitSegment(ctx, &AnswerSegment{
 		rid:   rid,
-		uuid:  uuid.NewString(),
+		asid:  uuid.NewString(),
 		dummy: true,
 	})
 
 	// Never wait for any response.
 	go func() {
-		defer stream.Close()
-		if err := handleStream(ctx, rid, stream); err != nil {
+		defer gptChatStream.Close()
+		if err := handleChatResponseStream(ctx, rid, gptChatStream); err != nil {
 			logger.Ef(ctx, "Handle stream failed, err %+v", err)
 		}
 	}()
 
 	// Response the request UUID and pulling the response.
 	ohttp.WriteData(ctx, w, r, struct {
-		UUID string `json:"uuid"`
-		ASR  string `json:"asr"`
+		RequestUUID string `json:"rid"`
+		ASR         string `json:"asr"`
 	}{
-		UUID: rid,
-		ASR:  asrText,
+		RequestUUID: rid,
+		ASR:         asrText,
 	})
 	return nil
 }
 
-func handleQuestion(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+// When user query the question state, which is identified by rid (request id).
+func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	// The rid is the request id, which identify this request, generally a question.
 	rid := r.URL.Query().Get("rid")
 	if rid == "" {
 		return errors.Errorf("empty rid")
 	}
 
-	sentence := ttsWorker.QueryReady(ctx, rid)
-	if sentence == nil {
+	segment := ttsWorker.QueryAnyReadySegment(ctx, rid)
+	if segment == nil {
 		ohttp.WriteData(ctx, w, r, struct {
-			UUID string `json:"uuid"`
+			AnswerSegmentUUID string `json:"asid"`
 		}{})
 		return nil
 	}
 
 	ohttp.WriteData(ctx, w, r, struct {
-		Processing bool   `json:"processing"`
-		UUID       string `json:"uuid"`
-		TTS        string `json:"tts"`
+		Processing        bool   `json:"processing"`
+		AnswerSegmentUUID string `json:"asid"`
+		TTS               string `json:"tts"`
 	}{
-		Processing: sentence.dummy || (!sentence.ready && sentence.err == nil),
-		UUID:       sentence.uuid,
-		TTS:        sentence.sentence,
+		Processing:        segment.dummy || (!segment.ready && segment.err == nil),
+		AnswerSegmentUUID: segment.asid,
+		TTS:               segment.text,
 	})
 	return nil
 }
 
-func handleTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+// When user download the answer tts, which is identified by rid (request id) and aid (answer id)
+func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	rid := r.URL.Query().Get("rid")
 	if rid == "" {
 		return errors.Errorf("empty rid")
 	}
 
-	uuid := r.URL.Query().Get("uuid")
-	if uuid == "" {
-		return errors.Errorf("empty uuid")
+	asid := r.URL.Query().Get("asid")
+	if asid == "" {
+		return errors.Errorf("empty asid")
 	}
 
-	sentence := ttsWorker.QueryTTS(rid, uuid)
-	if sentence == nil {
-		return errors.Errorf("no sentence for %v %v", rid, uuid)
+	segment := ttsWorker.QuerySegment(rid, asid)
+	if segment == nil {
+		return errors.Errorf("no segment for %v %v", rid, asid)
 	}
-	logger.Tf(ctx, "Query sentence %v %v, dummy=%v, sentence=%v, err=%v",
-		rid, uuid, sentence.dummy, sentence.sentence, sentence.err)
+	logger.Tf(ctx, "Query segment %v %v, dummy=%v, segment=%v, err=%v",
+		rid, asid, segment.dummy, segment.text, segment.err)
 
-	fmt.Fprintf(os.Stderr, "Bot: %v\n", sentence.sentence)
+	fmt.Fprintf(os.Stderr, "Bot: %v\n", segment.text)
 
 	// Read the ttsFile and response it as opus audio.
 	w.Header().Set("Content-Type", "audio/aac")
-	http.ServeFile(w, r, sentence.ttsFile)
+	http.ServeFile(w, r, segment.ttsFile)
 
 	return nil
 }
 
-func handleRemove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+// When user remove the answer tts, which is identified by rid (request id) and aid (answer id)
+func handleRemoveAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	rid := r.URL.Query().Get("rid")
 	if rid == "" {
 		return errors.Errorf("empty rid")
 	}
 
-	uuid := r.URL.Query().Get("uuid")
-	if uuid == "" {
-		return errors.Errorf("empty uuid")
+	asid := r.URL.Query().Get("asid")
+	if asid == "" {
+		return errors.Errorf("empty asid")
 	}
 
-	sentence := ttsWorker.QueryTTS(rid, uuid)
-	if sentence == nil {
-		return errors.Errorf("no sentence for %v %v", rid, uuid)
+	segment := ttsWorker.QuerySegment(rid, asid)
+	if segment == nil {
+		return errors.Errorf("no segment for %v %v", rid, asid)
 	}
 
 	// Remove it.
-	ttsWorker.Remove(uuid)
+	ttsWorker.RemoveSegment(asid)
 
 	select {
 	case <-ctx.Done():
-	case sentence.removeSignal <- true:
+	case segment.removeSignal <- true:
 	}
 
 	ohttp.WriteData(ctx, w, r, nil)
 	return nil
-}
-
-// setEnvDefault set env key=value if not set.
-func setEnvDefault(key, value string) {
-	if os.Getenv(key) == "" {
-		os.Setenv(key, value)
-	}
-}
-
-// httpCreateProxy create a reverse proxy for target URL.
-func httpCreateProxy(targetURL string) (*httputil.ReverseProxy, error) {
-	target, err := url.Parse(targetURL)
-	if err != nil {
-		return nil, errors.Wrapf(err, "parse backend %v", targetURL)
-	}
-
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.ModifyResponse = func(resp *http.Response) error {
-		// We will set the server field.
-		resp.Header.Del("Server")
-
-		// We will set the CORS headers.
-		resp.Header.Del("Access-Control-Allow-Origin")
-		resp.Header.Del("Access-Control-Allow-Headers")
-		resp.Header.Del("Access-Control-Allow-Methods")
-		resp.Header.Del("Access-Control-Expose-Headers")
-		resp.Header.Del("Access-Control-Allow-Credentials")
-
-		// Not used right now.
-		resp.Header.Del("Access-Control-Request-Private-Network")
-
-		return nil
-	}
-
-	return proxy, nil
 }
 
 func doMain(ctx context.Context) error {
@@ -614,6 +596,12 @@ func doMain(ctx context.Context) error {
 		}
 	}
 
+	// setEnvDefault set env key=value if not set.
+	setEnvDefault := func(key, value string) {
+		if os.Getenv(key) == "" {
+			os.Setenv(key, value)
+		}
+	}
 	setEnvDefault("OPENAI_PROXY", "api.openai.com")
 	setEnvDefault("HTTP_LISTEN", "3001")
 	setEnvDefault("HTTPS_LISTEN", "3443")
@@ -656,29 +644,37 @@ func doMain(ctx context.Context) error {
 
 	// HTTP API handlers.
 	handler := http.NewServeMux()
+
+	handler.HandleFunc("/api/ai-talk/start/", func(w http.ResponseWriter, r *http.Request) {
+		if err := handleScenarioStart(ctx, w, r); err != nil {
+			logger.Ef(ctx, "Handle start failed, err %+v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
 	handler.HandleFunc("/api/ai-talk/upload/", func(w http.ResponseWriter, r *http.Request) {
-		if err := handleAudio(ctx, w, r); err != nil {
+		if err := handleUploadQuestionAudio(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle audio failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
 	handler.HandleFunc("/api/ai-talk/question/", func(w http.ResponseWriter, r *http.Request) {
-		if err := handleQuestion(ctx, w, r); err != nil {
+		if err := handleQueryQuestionState(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle question failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
 	handler.HandleFunc("/api/ai-talk/tts/", func(w http.ResponseWriter, r *http.Request) {
-		if err := handleTTS(ctx, w, r); err != nil {
+		if err := handleDownloadAnswerTTS(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle tts failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
 	handler.HandleFunc("/api/ai-talk/remove/", func(w http.ResponseWriter, r *http.Request) {
-		if err := handleRemove(ctx, w, r); err != nil {
+		if err := handleRemoveAnswerTTS(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle remove failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -701,6 +697,34 @@ func doMain(ctx context.Context) error {
 		w.Header().Set("Content-Type", contentType)
 		http.ServeFile(w, r, path.Join(workDir, filename))
 	})
+
+	// httpCreateProxy create a reverse proxy for target URL.
+	httpCreateProxy := func(targetURL string) (*httputil.ReverseProxy, error) {
+		target, err := url.Parse(targetURL)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse backend %v", targetURL)
+		}
+
+		proxy := httputil.NewSingleHostReverseProxy(target)
+		proxy.ModifyResponse = func(resp *http.Response) error {
+			// We will set the server field.
+			resp.Header.Del("Server")
+
+			// We will set the CORS headers.
+			resp.Header.Del("Access-Control-Allow-Origin")
+			resp.Header.Del("Access-Control-Allow-Headers")
+			resp.Header.Del("Access-Control-Allow-Methods")
+			resp.Header.Del("Access-Control-Expose-Headers")
+			resp.Header.Del("Access-Control-Allow-Credentials")
+
+			// Not used right now.
+			resp.Header.Del("Access-Control-Request-Private-Network")
+
+			return nil
+		}
+
+		return proxy, nil
+	}
 
 	// Serve static files.
 	static := http.FileServer(http.Dir("../build"))

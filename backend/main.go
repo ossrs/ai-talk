@@ -56,6 +56,8 @@ type Stage struct {
 	previousUser, previousAssitant string
 	// The chat history, to use as prompt for next chat.
 	histories []openai.ChatCompletionMessage
+	// Whether the stage is generating more sentences.
+	generating bool
 }
 
 func NewStage(opts ...func(*Stage)) *Stage {
@@ -213,33 +215,42 @@ func (v *TTSWorker) QuerySegment(rid, asid string) *AnswerSegment {
 	return nil
 }
 
-func (v *TTSWorker) QueryAnyReadySegment(ctx context.Context, rid string) *AnswerSegment {
+func (v *TTSWorker) QueryAnyReadySegment(ctx context.Context, stage *Stage, rid string) *AnswerSegment {
 	for ctx.Err() == nil {
-		var s *AnswerSegment
+		select {
+		case <-ctx.Done():
+		case <-time.After(100 * time.Millisecond):
+		}
 
-		// When there is no segments, maybe AI is generating the sentence, we need to wait. For example,
+		// When there is no segments, and AI is generating the sentence, we need to wait. For example,
 		// if the first sentence is very short, maybe we got it quickly, but the second sentence is very
 		// long so that the AI need more time to generate it.
-		for i := 0; i < 10 && s == nil; i++ {
+		var s *AnswerSegment
+		for ctx.Err() == nil && s == nil && stage.generating {
 			if s = v.query(rid); s == nil {
 				select {
 				case <-ctx.Done():
-				case <-time.After(200 * time.Millisecond):
+				case <-time.After(100 * time.Millisecond):
 				}
 			}
 		}
 
+		// Try to fetch one again, because maybe there is new segment.
+		s = v.query(rid)
+
+		// All segments are consumed, we return nil.
 		if s == nil {
 			return nil
 		}
 
-		if !s.dummy && (s.ready || s.err != nil) {
-			return s
+		// Wait for dummy segment to be removed.
+		if s.dummy {
+			continue
 		}
 
-		select {
-		case <-ctx.Done():
-		case <-time.After(300 * time.Millisecond):
+		// When segment is finished(ready or error), we return it.
+		if s.ready || s.err != nil {
+			return s
 		}
 	}
 
@@ -388,6 +399,11 @@ func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Reques
 // When user ask a question, which is a request with audio, which is identified by rid (request id).
 func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	handleChatResponseStream := func(ctx context.Context, stage *Stage, rid string, gptChatStream *openai.ChatCompletionStream) error {
+		stage.generating = true
+		defer func() {
+			stage.generating = false
+		}()
+
 		var sentence string
 		var finished bool
 		firstSentense := true
@@ -700,8 +716,9 @@ func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *htt
 	}
 	logger.Tf(ctx, "Stage: Query sid=%v, rid=%v", sid, rid)
 
-	segment := stage.ttsWorker.QueryAnyReadySegment(ctx, rid)
+	segment := stage.ttsWorker.QueryAnyReadySegment(ctx, stage, rid)
 	if segment == nil {
+		logger.Tf(ctx, "TTS: No segment for sid=%v, rid=%v", sid, rid)
 		ohttp.WriteData(ctx, w, r, struct {
 			AnswerSegmentUUID string `json:"asid"`
 		}{})

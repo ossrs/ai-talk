@@ -215,7 +215,7 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
 
 			ttsWorker.RemoveSegment(segment.asid)
 
-			if segment.ttsFile != "" && os.Getenv("KEEP_AUDIO_FILES") != "true" {
+			if segment.ttsFile != "" && os.Getenv("AIT_KEEP_FILES") != "true" {
 				if _, err := os.Stat(segment.ttsFile); err == nil {
 					os.Remove(segment.ttsFile)
 				}
@@ -312,8 +312,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 				if firstSentense {
 					firstSentense = false
-					if os.Getenv("AI_NO_PADDING") != "true" {
-						sentence = fmt.Sprintf("%v%v", os.Getenv("AI_PADDING_TEXT"), sentence)
+					if os.Getenv("AIT_REPLY_PREFIX") != "" {
+						sentence = fmt.Sprintf("%v %v", os.Getenv("AIT_REPLY_PREFIX"), sentence)
 					}
 				}
 
@@ -340,7 +340,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 	// We save the input audio to *.audio file, it can be aac or opus codec.
 	inputFile := path.Join(workDir, fmt.Sprintf("%v-input.audio", rid))
-	if os.Getenv("KEEP_AUDIO_FILES") != "true" {
+	if os.Getenv("AIT_KEEP_FILES") != "true" {
 		defer os.Remove(inputFile)
 	}
 	if err := func() error {
@@ -369,7 +369,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 
 	outputFile := path.Join(workDir, fmt.Sprintf("%v-input.m4a", rid))
-	if os.Getenv("KEEP_AUDIO_FILES") != "true" {
+	if os.Getenv("AIT_KEEP_FILES") != "true" {
 		defer os.Remove(outputFile)
 	}
 	if true {
@@ -398,7 +398,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 			Model:    openai.Whisper1,
 			FilePath: outputFile,
 			Format:   openai.AudioResponseFormatJSON,
-			Language: os.Getenv("AI_ASR_LANGUAGE"),
+			Language: os.Getenv("AIT_ASR_LANGUAGE"),
 			Prompt:   previousAsrText,
 		},
 	)
@@ -406,7 +406,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		return errors.Wrapf(err, "transcription")
 	}
 	logger.Tf(ctx, "ASR ok, lang=%v, prompt=<%v>, resp is <%v>",
-		os.Getenv("AI_ASR_LANGUAGE"), previousAsrText, resp.Text)
+		os.Getenv("AIT_ASR_LANGUAGE"), previousAsrText, resp.Text)
 	asrText := resp.Text
 	previousAsrText = resp.Text
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
@@ -427,8 +427,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	previousUser = previousAsrText
 	previousAssitant = ""
 
-	system := os.Getenv("AI_SYSTEM_PROMPT")
-	system += fmt.Sprintf("Keep your reply neat, limiting the reply to %v words.", os.Getenv("AI_REPLY_LIMIT"))
+	system := os.Getenv("AIT_SYSTEM_PROMPT")
+	system += fmt.Sprintf("Keep your reply neat, limiting the reply to %v words.", os.Getenv("AIT_REPLY_LIMIT"))
 	logger.Tf(ctx, "AI system prompt: %v", system)
 	messages := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: system},
@@ -440,21 +440,21 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		Content: previousAsrText,
 	})
 
-	model := os.Getenv("AI_MODEL")
+	model := os.Getenv("AIT_CHAT_MODEL")
 	var maxTokens int
-	if v, err := strconv.ParseInt(os.Getenv("AI_MAX_TOKENS"), 10, 64); err != nil {
-		return errors.Wrapf(err, "parse AI_MAX_TOKENS")
+	if v, err := strconv.ParseInt(os.Getenv("AIT_MAX_TOKENS"), 10, 64); err != nil {
+		return errors.Wrapf(err, "parse AIT_MAX_TOKENS")
 	} else {
 		maxTokens = int(v)
 	}
 
 	var temperature float32
-	if v, err := strconv.ParseFloat(os.Getenv("AI_TEMPERATURE"), 64); err != nil {
-		return errors.Wrapf(err, "parse AI_TEMPERATURE")
+	if v, err := strconv.ParseFloat(os.Getenv("AIT_TEMPERATURE"), 64); err != nil {
+		return errors.Wrapf(err, "parse AIT_TEMPERATURE")
 	} else {
 		temperature = float32(v)
 	}
-	logger.Tf(ctx, "AI_MODEL: %v, AI_MAX_TOKENS: %v, AI_TEMPERATURE: %v",
+	logger.Tf(ctx, "AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v",
 		model, maxTokens, temperature)
 
 	gptChatStream, err := client.CreateChatCompletionStream(
@@ -708,7 +708,7 @@ func doMain(ctx context.Context) error {
 		return err
 	}
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if os.Getenv("PROXY_STATIC") == "true" {
+		if os.Getenv("AIT_PROXY_STATIC") == "true" {
 			proxy3000.ServeHTTP(w, r)
 		} else {
 			static.ServeHTTP(w, r)
@@ -792,7 +792,7 @@ func doMain(ctx context.Context) error {
 			return errors.Wrapf(err, "cert: ignore load cert %v, key %v failed", crtFile, keyFile)
 		}
 
-		addr := os.Getenv("HTTPS_LISTEN")
+		addr := os.Getenv("AIT_HTTPS_LISTEN")
 		if !strings.HasPrefix(addr, ":") {
 			addr = fmt.Sprintf(":%v", addr)
 		}
@@ -820,7 +820,7 @@ func doMain(ctx context.Context) error {
 	}()
 
 	// Start HTTP server.
-	listen := os.Getenv("HTTP_LISTEN")
+	listen := os.Getenv("AIT_HTTP_LISTEN")
 	if !strings.HasPrefix(listen, ":") {
 		listen = fmt.Sprintf(":%v", listen)
 	}
@@ -848,27 +848,27 @@ func doConfig(ctx context.Context) error {
 			os.Setenv(key, value)
 		}
 	}
+	setEnvDefault("OPENAI_API_KEY", "")
 	setEnvDefault("OPENAI_PROXY", "api.openai.com")
-	setEnvDefault("HTTP_LISTEN", "3001")
-	setEnvDefault("HTTPS_LISTEN", "3443")
-	setEnvDefault("PROXY_STATIC", "true")
-	setEnvDefault("AI_NO_PADDING", "true")
-	setEnvDefault("AI_PADDING_TEXT", "My answer is ")
-	setEnvDefault("AI_SYSTEM_PROMPT", "You are a helpful assistant.")
-	setEnvDefault("AI_MODEL", openai.GPT4TurboPreview)
-	setEnvDefault("AI_MAX_TOKENS", "1024")
-	setEnvDefault("AI_TEMPERATURE", "0.9")
-	setEnvDefault("KEEP_AUDIO_FILES", "false")
-	setEnvDefault("AI_ASR_LANGUAGE", "en")
-	setEnvDefault("AI_REPLY_LIMIT", "50")
-	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, HTTP_LISTEN=%v, HTTPS_LISTEN=%v, PROXY_STATIC=%v, "+
-		"AI_NO_PADDING=%v, AI_PADDING_TEXT=%v, AI_SYSTEM_PROMPT=%v, AI_MODEL=%v, AI_MAX_TOKENS=%v, AI_TEMPERATURE=%v, "+
-		"KEEP_AUDIO_FILES=%v, AI_ASR_LANGUAGE=%v, AI_REPLY_LIMIT=%v",
-		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("HTTP_LISTEN"),
-		os.Getenv("HTTPS_LISTEN"), os.Getenv("PROXY_STATIC"), os.Getenv("AI_NO_PADDING"),
-		os.Getenv("AI_PADDING_TEXT"), os.Getenv("AI_SYSTEM_PROMPT"), os.Getenv("AI_MODEL"),
-		os.Getenv("AI_MAX_TOKENS"), os.Getenv("AI_TEMPERATURE"), os.Getenv("KEEP_AUDIO_FILES"),
-		os.Getenv("AI_ASR_LANGUAGE"), os.Getenv("AI_REPLY_LIMIT"),
+	setEnvDefault("AIT_HTTP_LISTEN", "3001")
+	setEnvDefault("AIT_HTTPS_LISTEN", "3443")
+	setEnvDefault("AIT_PROXY_STATIC", "true")
+	setEnvDefault("AIT_REPLY_PREFIX", "")
+	setEnvDefault("AIT_SYSTEM_PROMPT", "You are a helpful assistant.")
+	setEnvDefault("AIT_CHAT_MODEL", openai.GPT4TurboPreview)
+	setEnvDefault("AIT_MAX_TOKENS", "1024")
+	setEnvDefault("AIT_TEMPERATURE", "0.9")
+	setEnvDefault("AIT_KEEP_FILES", "false")
+	setEnvDefault("AIT_ASR_LANGUAGE", "en")
+	setEnvDefault("AIT_REPLY_LIMIT", "50")
+	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, AIT_HTTP_LISTEN=%v, AIT_HTTPS_LISTEN=%v, AIT_PROXY_STATIC=%v, "+
+		"AIT_REPLY_PREFIX=%v, AIT_SYSTEM_PROMPT=%v, AIT_CHAT_MODEL=%v, AIT_MAX_TOKENS=%v, AIT_TEMPERATURE=%v, "+
+		"AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v",
+		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("AIT_HTTP_LISTEN"),
+		os.Getenv("AIT_HTTPS_LISTEN"), os.Getenv("AIT_PROXY_STATIC"), os.Getenv("AIT_REPLY_PREFIX"),
+		os.Getenv("AIT_SYSTEM_PROMPT"), os.Getenv("AIT_CHAT_MODEL"),
+		os.Getenv("AIT_MAX_TOKENS"), os.Getenv("AIT_TEMPERATURE"), os.Getenv("AIT_KEEP_FILES"),
+		os.Getenv("AIT_ASR_LANGUAGE"), os.Getenv("AIT_REPLY_LIMIT"),
 	)
 
 	// Initialize OpenAI client config.

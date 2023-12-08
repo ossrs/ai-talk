@@ -41,7 +41,7 @@ https://github.com/winlinvip/ai-talk/assets/2777660/e9796775-0e60-4ac3-a641-1220
 Please setup the envirionments:
 ```
 AIT_ASR_LANGUAGE=zh
-AIT_SYSTEM_PROMPT='我希望你是一个儿童的词语接龙的助手。我希望你做两个词的词语接龙。我希望你不要用重复的词语。我希望你回答比较简短，不超过50字。我希望你重复我说的词，然后再接龙。我希望你回答时，解释下词语的含义。请记住，你讲的答案是给6岁小孩听得懂的。请记住，你要做词语接龙。例如：我：苹果。你：苹果，果园。苹果，是一种水果，长在树上，是红色的。果园，是一种地方，有很多树，有很多果子。'
+AIT_SYSTEM_PROMPT='我希望你是一个儿童的词语接龙的助手。我希望你做两个词的词语接龙。我希望你不要用重复的词语。我希望你重复我说的词，然后再接龙。我希望你回答时，解释下词语的含义。请记住，你讲的答案是给6岁小孩听得懂的。请记住，你要做词语接龙。例如：我：苹果。你：苹果，果园。苹果，是一种水果，长在树上，是红色的。果园，是一种地方，有很多树，有很多果子。'
 ```
 
 https://github.com/winlinvip/ai-talk/assets/2777660/175b100b-8eba-45ca-ac41-0484d026d623
@@ -83,6 +83,7 @@ Optional environment variables:
 * `AIT_SYSTEM_PROMPT`: The system prompt, default to `You are a helpful assistant.`.
   * To make sure AI response limit words to avoid long audio, we always append `Keep your reply neat, limiting the reply to ${AIT_REPLY_LIMIT} words.` to system prompt.
   * You can set `AIT_REPLY_LIMIT` to limit the words of AI response, default to `50`.
+  * Please use `AIT_EXTRA_ROBOTS` to set the number of extra robots, default to `0`.
 * `AIT_CHAT_MODEL`: The AI model, default to `gpt-4-1106-preview` which is the latest model.
 * `AIT_ASR_LANGUAGE`: The language for Whisper ASR, default to `en`, see [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes), bellow are some examples:
   * `en`: English
@@ -107,6 +108,15 @@ Other optional environment variables:
 * `AIT_KEEP_FILES`: Whether keep audio files, default to `false`.
 * `AIT_REPLY_LIMIT`: The AI reply limit words, default to `50`.
 * `AIT_CHAT_WINDOW`: The AI chat window to store historical messages, default to `5`.
+* `AIT_DEFAULT_ROBOT`: Whether enable the default robot, prompt is `AIT_SYSTEM_PROMPT`, default to `true`.
+
+The extra robots can be added by environments:
+
+* `AIT_EXTRA_ROBOTS`: The number of extra robots, default to `0`.
+* `AIT_ROBOT_0_LABEL`: The label for extra robot `#0`, for example, `English Spoken Coach`.
+* `AIT_ROBOT_0_PROMPT`: The prompt for extra robot `#0`, for example, `I want you to act as a spoken English teacher and improver.`.
+* `AIT_ROBOT_0_ASR_LANGUAGE`: The language for extra robot `#0`, see `AIT_ASR_LANGUAGE`, default to `en`.
+* `AIT_ROBOT_0_PREFIX`: (Optional) The prefix for the first sentence for extra robot `#0`, see `AIT_REPLY_PREFIX`.
 
 ## HTTPS Certificate
 

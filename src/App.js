@@ -42,6 +42,8 @@ function App() {
   const isMobile = useIsMobile();
   const isOssrsNet = useIsOssrsNet();
 
+  // Whether we're loading the page and request permission.
+  const [loading, setLoading] = React.useState(true);
   // Whether user click the start, we're trying to start the stage.
   const [starting, setStarting] = React.useState(false);
   // Whether stage is starged, user're allowd to talk with AI.
@@ -60,6 +62,8 @@ function App() {
   const playerRef = React.useRef(null);
   // Whether audio player is available to play or replay.
   const [playerAvailable, setPlayerAvailable] = React.useState(false);
+  // The available robots for user to select.
+  const [robots, setRobots] = React.useState([]);
 
   // The refs, about the logs and audio chunks model.
   const ref = React.useRef({
@@ -68,6 +72,7 @@ function App() {
     verboseLogs: [],
     infoLogs: [],
     stageUUID: null,
+    robotUUID: null,
   });
 
   // Write a summary or info log, which is important but short message for user.
@@ -90,29 +95,31 @@ function App() {
   // The application is started now.
   React.useEffect(() => {
     verbose('App started');
-    info('App started');
   }, [info, verbose]);
+
+  // Request permission to use microphone.
+  React.useEffect(() => {
+    verbose(`Start: Create a new stage`);
+
+    fetch('/api/ai-talk/start/', {
+      method: 'POST',
+    }).then(response => {
+      return response.json();
+    }).then((data) => {
+      verbose(`Start: Create stage success: ${data.data.sid}, ${data.data.robots.length} robots`);
+      ref.current.stageUUID = data.data.sid;
+      ref.current.robotUUID = data.data.robots[0].uuid;
+      info(`Use robot ${data.data.robots[0].label}`);
+      setRobots(data.data.robots);
+      setLoading(false);
+    }).catch((error) => alert(`Create stage error: ${error}`));
+  }, [ref, setLoading, setRobots, info, verbose]);
 
   // User start a stage.
   const onStartStage = React.useCallback(async () => {
     try {
       setStarting(true);
       verbose("Start the app");
-
-      // Create a new stage.
-      const stageUUID = await new Promise((resolve, reject) => {
-        verbose(`Start: Create a new stage`);
-
-        fetch('/api/ai-talk/start/', {
-          method: 'POST',
-        }).then(response => {
-          return response.json();
-        }).then((data) => {
-          verbose(`Start: Create stage success: ${data.data.sid}`);
-          resolve(data.data.sid);
-        }).catch((error) => reject(error));
-      });
-      ref.current.stageUUID = stageUUID;
 
       // Play the welcome audio.
       await new Promise(resolve => {
@@ -162,11 +169,11 @@ function App() {
 
       setStarted(true);
       info(`Stage started, AI is ready`);
-      verbose(`Stage started, AI is ready, sid=${stageUUID}`);
+      verbose(`Stage started, AI is ready, sid=${ref.current.stageUUID}`);
     } finally {
       setStarting(false);
     }
-  }, [verbose, info, setStarted, playerRef, setPlayerAvailable, ref]);
+  }, [verbose, info, setStarted, playerRef, setPlayerAvailable, ref, robots]);
 
   // User start a conversation, by recording input.
   const startRecording = React.useCallback(async () => {
@@ -216,7 +223,7 @@ function App() {
     try {
       // Upload the user input audio to the server.
       const requestUUID = await new Promise((resolve, reject) => {
-        verbose(`ASR: Uploading ${ref.current.audioChunks.length} chunks`);
+        verbose(`ASR: Uploading ${ref.current.audioChunks.length} chunks, robot=${ref.current.robotUUID}`);
         const audioBlob = new Blob(ref.current.audioChunks);
         ref.current.audioChunks = [];
 
@@ -224,7 +231,7 @@ function App() {
         const formData = new FormData();
         formData.append('file', audioBlob, 'input.audio');
 
-        fetch(`/api/ai-talk/upload/?sid=${ref.current.stageUUID}`, {
+        fetch(`/api/ai-talk/upload/?sid=${ref.current.stageUUID}&robot=${ref.current.robotUUID}`, {
           method: 'POST',
           body: formData,
         }).then(response => {
@@ -238,7 +245,7 @@ function App() {
 
       // Get the AI generated audio from the server.
       while (true) {
-        verbose(`TTS: Requesting ${requestUUID} response audios`);
+        verbose(`TTS: Requesting ${requestUUID} response audios, rid=${requestUUID}`);
         let audioSegmentUUID = null;
         while (!audioSegmentUUID) {
           const resp = await new Promise((resolve, reject) => {
@@ -269,7 +276,7 @@ function App() {
 
         // All audios are played.
         if (!audioSegmentUUID) {
-          verbose(`TTS: All audios are played.`);
+          verbose(`TTS: All audios are played, rid=${requestUUID}`);
           verbose("===========================");
           break;
         }
@@ -341,7 +348,7 @@ function App() {
 
   return (<div className="App">
     <header className="App-header">
-      {!started && <button
+      {!loading && !started && <button
         disabled={starting} className='StartButton' onClick={(e) => {
           onStartStage();
       }}>Click to start</button>}
@@ -360,6 +367,18 @@ function App() {
     </header>
     <p><audio ref={playerRef} controls={true} hidden={!playerAvailable} /></p>
     <p>
+      {robots?.length && <React.Fragment>
+        Robots: <select disabled={starting || started} onChange={(e) => {
+          const robot = robots.find(robot => robot.uuid === e.target.value);
+          ref.current.robotUUID = robot.uuid;
+          info(`Change to robot ${robot.label}`);
+          verbose(`Change to robot ${robot.label} ${robot.uuid}`);
+        }}>
+        {robots.map(robot => {
+          return <option key={robot.uuid} value={robot.uuid}>{robot.label}</option>;
+        })}
+      </select> &nbsp;
+      </React.Fragment>}
       {playerAvailable && <React.Fragment>
         <button onClick={(e) => {
           verbose(`Replay last audio`);

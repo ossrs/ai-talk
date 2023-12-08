@@ -38,6 +38,41 @@ import (
 var talkServer *TalkServer
 var aiConfig openai.ClientConfig
 var workDir string
+var robots []*Robot
+
+// The Robot is a robot that user can talk with.
+type Robot struct {
+	// The robot uuid.
+	uuid string
+	// The robot label.
+	label string
+	// The robot prompt.
+	prompt string
+	// The robot ASR language.
+	asrLanguage string
+	// The prefix for TTS for the first sentence if too short.
+	prefix string
+}
+
+// Get the robot by uuid.
+func GetRobot(uuid string) *Robot {
+	for _, robot := range robots {
+		if robot.uuid == uuid {
+			return robot
+		}
+	}
+	return nil
+}
+
+func (v Robot) String() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("uuid:%v,label:%v,asr:%v", v.uuid, v.label, v.asrLanguage))
+	if v.prefix != "" {
+		sb.WriteString(fmt.Sprintf(",prefix:%v", v.prefix))
+	}
+	sb.WriteString(fmt.Sprintf(",prompt:%v", v.prompt))
+	return sb.String()
+}
 
 // The Stage is a stage of conversation, when user click start with a scenario,
 // we will create a stage object.
@@ -388,17 +423,31 @@ func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Reques
 		}
 	}()
 
-	ohttp.WriteData(ctx, w, r, struct {
-		StageID string `json:"sid"`
-	}{
+	type StageRobotResult struct {
+		UUID  string `json:"uuid"`
+		Label string `json:"label"`
+	}
+	type StageResult struct {
+		StageID string             `json:"sid"`
+		Robots  []StageRobotResult `json:"robots"`
+	}
+	r0 := &StageResult{
 		StageID: stage.sid,
-	})
+	}
+	for _, robot := range robots {
+		r0.Robots = append(r0.Robots, StageRobotResult{
+			UUID:  robot.uuid,
+			Label: robot.label,
+		})
+	}
+
+	ohttp.WriteData(ctx, w, r, r0)
 	return nil
 }
 
 // When user ask a question, which is a request with audio, which is identified by rid (request id).
 func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	handleChatResponseStream := func(ctx context.Context, stage *Stage, rid string, gptChatStream *openai.ChatCompletionStream) error {
+	handleChatResponseStream := func(ctx context.Context, stage *Stage, robot *Robot, rid string, gptChatStream *openai.ChatCompletionStream) error {
 		stage.generating = true
 		defer func() {
 			stage.generating = false
@@ -479,8 +528,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 				if firstSentense {
 					firstSentense = false
-					if os.Getenv("AIT_REPLY_PREFIX") != "" {
-						sentence = fmt.Sprintf("%v %v", os.Getenv("AIT_REPLY_PREFIX"), sentence)
+					if robot.prefix != "" {
+						sentence = fmt.Sprintf("%v %v", robot.prefix, sentence)
 					}
 				}
 
@@ -514,12 +563,23 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	// Switch to the context of stage.
 	ctx = stage.loggingCtx
 
+	// Get the robot to talk with.
+	robotUUID := r.URL.Query().Get("robot")
+	if robotUUID == "" {
+		return errors.Errorf("empty robot")
+	}
+
+	robot := GetRobot(robotUUID)
+	if robot == nil {
+		return errors.Errorf("invalid robot %v", robotUUID)
+	}
+
 	// The rid is the request id, which identify this request, generally a question.
 	rid := uuid.NewString()
 	inputFile := path.Join(workDir, fmt.Sprintf("%v-input.audio", rid))
 	outputFile := path.Join(workDir, fmt.Sprintf("%v-input.m4a", rid))
-	logger.Tf(ctx, "Stage: Got question rid=%v, sid=%v, input=%v, output=%v",
-		rid, sid, inputFile, outputFile)
+	logger.Tf(ctx, "Stage: Got question sid=%v, robot=%v(%v), rid=%v, input=%v, output=%v",
+		sid, robot.uuid, robot.label, rid, inputFile, outputFile)
 
 	// We save the input audio to *.audio file, it can be aac or opus codec.
 	if os.Getenv("AIT_KEEP_FILES") != "true" {
@@ -581,15 +641,15 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 			Model:    openai.Whisper1,
 			FilePath: outputFile,
 			Format:   openai.AudioResponseFormatJSON,
-			Language: os.Getenv("AIT_ASR_LANGUAGE"),
+			Language: robot.asrLanguage,
 			Prompt:   stage.previousAsrText,
 		},
 	)
 	if err != nil {
 		return errors.Wrapf(err, "transcription")
 	}
-	logger.Tf(ctx, "ASR ok, lang=%v, prompt=<%v>, resp is <%v>",
-		os.Getenv("AIT_ASR_LANGUAGE"), stage.previousAsrText, resp.Text)
+	logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, prompt=<%v>, resp is <%v>",
+		robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, resp.Text)
 	asrText := resp.Text
 	stage.previousAsrText = resp.Text
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
@@ -620,7 +680,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	stage.previousUser = stage.previousAsrText
 	stage.previousAssitant = ""
 
-	system := os.Getenv("AIT_SYSTEM_PROMPT")
+	system := robot.prompt
 	system += fmt.Sprintf("Keep your reply neat, limiting the reply to %v words.", os.Getenv("AIT_REPLY_LIMIT"))
 	logger.Tf(ctx, "AI system prompt: %v", system)
 	messages := []openai.ChatCompletionMessage{
@@ -647,8 +707,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	} else {
 		temperature = float32(v)
 	}
-	logger.Tf(ctx, "AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v",
-		model, maxTokens, temperature)
+	logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v",
+		robot.uuid, robot.label, model, maxTokens, temperature)
 
 	gptChatStream, err := client.CreateChatCompletionStream(
 		ctx, openai.ChatCompletionRequest{
@@ -675,7 +735,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	// Never wait for any response.
 	go func() {
 		defer gptChatStream.Close()
-		if err := handleChatResponseStream(ctx, stage, rid, gptChatStream); err != nil {
+		if err := handleChatResponseStream(ctx, stage, robot, rid, gptChatStream); err != nil {
 			logger.Ef(ctx, "Handle stream failed, err %+v", err)
 		}
 	}()
@@ -1122,6 +1182,8 @@ func doConfig(ctx context.Context) error {
 	setEnvDefault("AIT_REPLY_LIMIT", "50")
 	setEnvDefault("AIT_DEVELOPMENT", "true")
 	setEnvDefault("AIT_CHAT_WINDOW", "5")
+	setEnvDefault("AIT_EXTRA_ROBOTS", "0")
+	setEnvDefault("AIT_DEFAULT_ROBOT", "true")
 
 	// Load env variables from file.
 	if _, err := os.Stat("../.env"); err == nil {
@@ -1135,13 +1197,46 @@ func doConfig(ctx context.Context) error {
 
 	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, AIT_HTTP_LISTEN=%v, AIT_HTTPS_LISTEN=%v, "+
 		"AIT_PROXY_STATIC=%v, AIT_REPLY_PREFIX=%v, AIT_SYSTEM_PROMPT=%v, AIT_CHAT_MODEL=%v, AIT_MAX_TOKENS=%v, "+
-		"AIT_TEMPERATURE=%v, AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v, AIT_CHAT_WINDOW=%v",
+		"AIT_TEMPERATURE=%v, AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v, AIT_CHAT_WINDOW=%v, "+
+		"AIT_EXTRA_ROBOTS=%v, AIT_DEFAULT_ROBOT=%v",
 		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("AIT_HTTP_LISTEN"),
 		os.Getenv("AIT_HTTPS_LISTEN"), os.Getenv("AIT_PROXY_STATIC"), os.Getenv("AIT_REPLY_PREFIX"),
 		os.Getenv("AIT_SYSTEM_PROMPT"), os.Getenv("AIT_CHAT_MODEL"), os.Getenv("AIT_MAX_TOKENS"),
 		os.Getenv("AIT_TEMPERATURE"), os.Getenv("AIT_KEEP_FILES"), os.Getenv("AIT_ASR_LANGUAGE"),
-		os.Getenv("AIT_REPLY_LIMIT"), os.Getenv("AIT_CHAT_WINDOW"),
+		os.Getenv("AIT_REPLY_LIMIT"), os.Getenv("AIT_CHAT_WINDOW"), os.Getenv("AIT_EXTRA_ROBOTS"),
+		os.Getenv("AIT_DEFAULT_ROBOT"),
 	)
+
+	// Config all robots.
+	if os.Getenv("AIT_DEFAULT_ROBOT") == "true" {
+		robots = append(robots, &Robot{
+			uuid: uuid.NewString(), label: "Default", asrLanguage: os.Getenv("AIT_ASR_LANGUAGE"),
+			prompt: os.Getenv("AIT_SYSTEM_PROMPT"),
+		})
+	}
+
+	if v, err := strconv.ParseInt(os.Getenv("AIT_EXTRA_ROBOTS"), 10, 64); err != nil {
+		return errors.Wrapf(err, "parse AIT_EXTRA_ROBOTS %v", os.Getenv("AIT_EXTRA_ROBOTS"))
+	} else {
+		for i := 0; i < int(v); i++ {
+			setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i), "en")
+
+			robots = append(robots, &Robot{
+				uuid:   uuid.NewString(),
+				label:  os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i)),
+				prompt: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i)),
+				prefix: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i)),
+				// The ASR language for whisper.
+				asrLanguage: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)),
+			})
+		}
+	}
+
+	var sb []string
+	for i, robot := range robots {
+		sb = append(sb, fmt.Sprintf("#%v=<%v>", i, robot.String()))
+	}
+	logger.Tf(ctx, "Robots: total=%v, %v", len(robots), strings.Join(sb, ", "))
 
 	// Initialize OpenAI client config.
 	aiConfig = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))

@@ -188,14 +188,14 @@ function SelectRobot({info, verbose, onStartStage}) {
           setTimeout(() => {
             verbose(`Start: Microphone test ok.`);
             resolve();
-          }, 500);
+          }, 50);
         });
 
         recorder.start();
         setTimeout(() => {
           recorder.stop();
           verbose(`Start: Microphone stopping, state is ${recorder.state}`);
-        }, 100);
+        }, 30);
       }).catch(error => alert(`Open microphone error: ${error}`));
     }).then(() => {
       setAllowed(true);
@@ -433,7 +433,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     }
   }, [info, verbose, playerRef, setPlayerAvailable, stageUUID, robot, ref, setProcessing, setRecording, setAttention]);
 
-  // Use delay stop.
+  // User click stop button, we delay some time to allow cancel the stopping event.
   const stopRecording = React.useCallback(async () => {
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     ref.current.stopHandler = setTimeout(() => {
@@ -464,6 +464,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     };
   }, [startRecording, stopRecording, started, processing]);
 
+  // User click the welcome audio button.
   const onClickWelcomeAudio = React.useCallback(() => {
     verbose(`Play example aac audio`);
     playerRef.current.src = `/api/ai-talk/examples/hello.aac`;

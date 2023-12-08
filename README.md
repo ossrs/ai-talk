@@ -151,5 +151,6 @@ The changelog:
   * Fix Android browser select button label issue. v1.0.13
   * Add micWorking and attention state to avoid data loss. v1.0.14
   * Refine the UI for mobile browser. v1.0.15
+  * Fast require microphone permission. v1.0.16
 
 Winlin, 2023.12

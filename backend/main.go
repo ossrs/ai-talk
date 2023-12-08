@@ -52,6 +52,8 @@ type Robot struct {
 	asrLanguage string
 	// The prefix for TTS for the first sentence if too short.
 	prefix string
+	// The welcome voice url.
+	voice string
 }
 
 // Get the robot by uuid.
@@ -70,7 +72,7 @@ func (v Robot) String() string {
 	if v.prefix != "" {
 		sb.WriteString(fmt.Sprintf(",prefix:%v", v.prefix))
 	}
-	sb.WriteString(fmt.Sprintf(",prompt:%v", v.prompt))
+	sb.WriteString(fmt.Sprintf(",voice=%v,prompt:%v", v.voice, v.prompt))
 	return sb.String()
 }
 
@@ -431,6 +433,7 @@ func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	type StageRobotResult struct {
 		UUID  string `json:"uuid"`
 		Label string `json:"label"`
+		Voice string `json:"voice"`
 	}
 	type StageResult struct {
 		StageID string             `json:"sid"`
@@ -443,6 +446,7 @@ func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Reques
 		r0.Robots = append(r0.Robots, StageRobotResult{
 			UUID:  robot.uuid,
 			Label: robot.label,
+			Voice: robot.voice,
 		})
 	}
 
@@ -622,7 +626,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	if true {
 		err := exec.CommandContext(ctx, "ffmpeg",
 			"-i", inputFile,
-			"-vn", "-c:a", "aac", "-ac", "1", "-ar", "16000", "-ab", "30k",
+			"-vn", "-c:a", "aac", "-ac", "1", "-ar", "16000", "-ab", "50k",
 			outputFile,
 		).Run()
 
@@ -1217,7 +1221,7 @@ func doConfig(ctx context.Context) error {
 	if os.Getenv("AIT_DEFAULT_ROBOT") == "true" {
 		robots = append(robots, &Robot{
 			uuid: uuid.NewString(), label: "Default", asrLanguage: os.Getenv("AIT_ASR_LANGUAGE"),
-			prompt: os.Getenv("AIT_SYSTEM_PROMPT"),
+			prompt: os.Getenv("AIT_SYSTEM_PROMPT"), voice: "hello-english.aac",
 		})
 	}
 
@@ -1227,8 +1231,13 @@ func doConfig(ctx context.Context) error {
 		for i := 0; i < int(v); i++ {
 			setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i), "en")
 
+			voice := "hello-english.aac"
+			if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)) != "en" {
+				voice = "hello-chinese.aac"
+			}
+
 			robots = append(robots, &Robot{
-				uuid:   uuid.NewString(),
+				uuid: uuid.NewString(), voice: voice,
 				label:  os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i)),
 				prompt: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i)),
 				prefix: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i)),

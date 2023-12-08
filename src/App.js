@@ -139,7 +139,8 @@ function App() {
         verbose(`Start: Play hello welcome audio`);
 
         setPlayerAvailable(true);
-        playerRef.current.src = `/api/ai-talk/examples/hello.aac?sid=${ref.current.stageUUID}`;
+        const robot = robots.find(robot => robot.uuid === ref.current.robotUUID);
+        playerRef.current.src = `/api/ai-talk/examples/${robot.voice}?sid=${ref.current.stageUUID}`;
 
         playerRef.current.play()
           .catch(error => alert(`Play error: ${error}`));
@@ -377,7 +378,7 @@ function App() {
         }}
         className={working ? 'DynamicButton' : 'StaticButton'}
         disabled={processing}
-      >{isMobile ? 'Press to talk' : 'Press the R key to talk'}</button>}
+      >{processing ? 'Processing' : isMobile ? 'Press to talk' : 'Press the R key to talk'}</button>}
     </header>
     <p><audio ref={playerRef} controls={true} hidden={!playerAvailable} /></p>
     <p>

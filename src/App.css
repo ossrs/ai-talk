@@ -1,4 +1,4 @@
-.StaticButton, .DynamicButton, .RecordingButton {
+.StaticButton, .DynamicButton, .RecordingButton, .ProcessingButton {
   font-size: 14px;
   text-align: center;
   cursor: pointer;
@@ -16,7 +16,7 @@
   height: 150px;
 }
 
-.DynamicButton, .RecordingButton {
+.DynamicButton, .RecordingButton, .ProcessingButton {
   width: 150px;
   height: 150px;
 }
@@ -24,7 +24,11 @@
 .RecordingButton {
   width: 200px;
   height: 200px;
-  background-color: rgba(157, 238, 91, 0.7);
+  background-color: rgba(0, 200, 0, 0.7);
+}
+
+.ProcessingButton {
+  background-color: rgba(0, 100, 0, 0.7);
 }
 
 .StartButton {
@@ -53,7 +57,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .DynamicButton, .RecordingButton {
+  .DynamicButton, .RecordingButton, .ProcessingButton {
     animation: App-logo-spin infinite 20s linear;
   }
 }

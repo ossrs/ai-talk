@@ -242,9 +242,9 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
 
   // User start a conversation, by recording input.
   const startRecording = React.useCallback(async () => {
+    if (!started) return;
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     if (ref.current.mediaRecorder) return;
-    if (!started) return;
     if (ref.current.isRecording) return;
     ref.current.isRecording = true;
 
@@ -281,6 +281,8 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
 
   // User click stop button, we delay some time to allow cancel the stopping event.
   const stopRecording = React.useCallback(async () => {
+    if (!started) return;
+
     const stopRecordingImpl = async () => {
       if (!ref.current.mediaRecorder) return;
 
@@ -406,7 +408,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
     }, 800);
-  }, [info, verbose, playerRef, stageUUID, robot, ref, setProcessing, setRecording, setAttention]);
+  }, [info, verbose, playerRef, stageUUID, robot, started, ref, setProcessing, setRecording, setAttention]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -429,7 +431,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [startRecording, stopRecording, started, processing]);
+  }, [started, startRecording, stopRecording, processing]);
 
   // User click the welcome audio button.
   const onClickWelcomeAudio = React.useCallback(() => {
@@ -443,7 +445,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
             disabled={!started || processing}>
-      <label className={!attention ? 'StaticButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}>
+      <label className={!attention ? 'StaticButton' : micWorking ? 'RecordingButton' : processing ? 'ProcessingButton' : 'DynamicButton'}>
         {recording ? '' : processing ? 'Processing' : (isMobile ? 'Press to talk' : 'Press the R key')}
       </label>
     </button>

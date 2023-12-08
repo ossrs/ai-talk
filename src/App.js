@@ -119,7 +119,7 @@ function App() {
         verbose(`Start: Play hello welcome audio`);
 
         setPlayerAvailable(true);
-        playerRef.current.src = "/api/ai-talk/examples/hello.aac";
+        playerRef.current.src = `/api/ai-talk/examples/hello.aac?sid=${ref.current.stageUUID}`;
 
         playerRef.current.play()
           .catch(error => alert(`Play error: ${error}`));
@@ -372,7 +372,7 @@ function App() {
       {showVerboseLogs && <React.Fragment>
         <button onClick={(e) => {
           verbose(`Play example aac audio`);
-          playerRef.current.src = "/api/ai-talk/examples/hello.aac";
+          playerRef.current.src = `/api/ai-talk/examples/hello.aac`;
           setPlayerAvailable(true);
           playerRef.current.play();
         }}>Welcome audio</button> &nbsp;

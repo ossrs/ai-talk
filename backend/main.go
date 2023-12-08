@@ -36,7 +36,6 @@ import (
 )
 
 var talkServer *TalkServer
-var ttsWorker *TTSWorker
 var previousAsrText string
 var previousUser, previousAssitant string
 var histories []openai.ChatCompletionMessage
@@ -50,19 +49,30 @@ type Stage struct {
 	sid string
 	// Last update of stage.
 	update time.Time
+	// The TTS worker for this stage.
+	ttsWorker *TTSWorker
+	// The logging context, to write all logs in one context for a sage.
+	loggingCtx context.Context
 }
 
-func NewStage() *Stage {
-	return &Stage{
+func NewStage(opts ...func(*Stage)) *Stage {
+	v := &Stage{
 		// Create new UUID.
 		sid: uuid.NewString(),
 		// Update time.
 		update: time.Now(),
+		// The TTS worker.
+		ttsWorker: NewTTSWorker(),
 	}
+
+	for _, opt := range opts {
+		opt(v)
+	}
+	return v
 }
 
 func (v *Stage) Close() error {
-	return nil
+	return v.ttsWorker.Close()
 }
 
 func (v *Stage) Expired() bool {
@@ -70,6 +80,10 @@ func (v *Stage) Expired() bool {
 		return time.Since(v.update) > 30*time.Second
 	}
 	return time.Since(v.update) > 300*time.Second
+}
+
+func (v *Stage) KeepAlive() {
+	v.update = time.Now()
 }
 
 // The AnswerSegment is a segment of answer, which is a sentence.
@@ -150,6 +164,19 @@ func (v *TalkServer) CountStage() int {
 	defer v.lock.Unlock()
 
 	return len(v.stages)
+}
+
+func (v *TalkServer) QueryStage(rid string) *Stage {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	for _, s := range v.stages {
+		if s.sid == rid {
+			return s
+		}
+	}
+
+	return nil
 }
 
 // The TTSWorker is a worker to convert answers from text to audio.
@@ -241,7 +268,7 @@ func (v *TTSWorker) RemoveSegment(asid string) {
 	}
 }
 
-func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
+func (v *TTSWorker) SubmitSegment(ctx context.Context, stage *Stage, segment *AnswerSegment) {
 	// Append the sentence to queue.
 	func() {
 		v.lock.Lock()
@@ -309,7 +336,7 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
 
 			logger.Tf(ctx, "Remove %v %v", segment.asid, segment.ttsFile)
 
-			ttsWorker.RemoveSegment(segment.asid)
+			stage.ttsWorker.RemoveSegment(segment.asid)
 
 			if segment.ttsFile != "" && os.Getenv("AIT_KEEP_FILES") != "true" {
 				if _, err := os.Stat(segment.ttsFile); err == nil {
@@ -322,7 +349,10 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
 
 // When user start a scenario or stage, response a stage object, which identified by sid or stage id.
 func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	stage := NewStage()
+	ctx = logger.WithContext(ctx)
+	stage := NewStage(func(stage *Stage) {
+		stage.loggingCtx = ctx
+	})
 
 	talkServer.AddStage(stage)
 	logger.Tf(ctx, "Stage: Create new stage rid=%v, all=%v", stage.sid, talkServer.CountStage())
@@ -354,7 +384,7 @@ func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Reques
 
 // When user ask a question, which is a request with audio, which is identified by rid (request id).
 func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	handleChatResponseStream := func(ctx context.Context, rid string, gptChatStream *openai.ChatCompletionStream) error {
+	handleChatResponseStream := func(ctx context.Context, stage *Stage, rid string, gptChatStream *openai.ChatCompletionStream) error {
 		var sentence string
 		var finished bool
 		firstSentense := true
@@ -435,7 +465,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 					}
 				}
 
-				ttsWorker.SubmitSegment(ctx, NewAnswerSegment(func(segment *AnswerSegment) {
+				stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
 					segment.rid = rid
 					segment.text = sentence
 					segment.ttsFile = path.Join(workDir,
@@ -449,19 +479,27 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		return nil
 	}
 
-	ctx = logger.WithContext(ctx)
-
 	// The stage uuid, user must create it before upload question audio.
 	sid := r.URL.Query().Get("sid")
 	if sid == "" {
 		return errors.Errorf("empty sid")
 	}
 
+	stage := talkServer.QueryStage(sid)
+	if stage == nil {
+		return errors.Errorf("invalid sid %v", sid)
+	}
+
+	// Keep alive the stage.
+	stage.KeepAlive()
+	// Switch to the context of stage.
+	ctx = stage.loggingCtx
+
 	// The rid is the request id, which identify this request, generally a question.
 	rid := uuid.NewString()
 	inputFile := path.Join(workDir, fmt.Sprintf("%v-input.audio", rid))
 	outputFile := path.Join(workDir, fmt.Sprintf("%v-input.m4a", rid))
-	logger.Tf(ctx, "ASR: Got question rid=%v, sid=%v, input=%v, output=%v",
+	logger.Tf(ctx, "Stage: Got question rid=%v, sid=%v, input=%v, output=%v",
 		rid, sid, inputFile, outputFile)
 
 	// We save the input audio to *.audio file, it can be aac or opus codec.
@@ -537,6 +575,9 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	previousAsrText = resp.Text
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
 
+	// Keep alive the stage.
+	stage.KeepAlive()
+
 	// Do chat, get the response in stream.
 	if previousUser != "" && previousAssitant != "" {
 		histories = append(histories, openai.ChatCompletionMessage{
@@ -597,8 +638,11 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		return errors.Wrapf(err, "create chat")
 	}
 
+	// Keep alive the stage.
+	stage.KeepAlive()
+
 	// Insert a dummy sentence to identify the request is alive.
-	ttsWorker.SubmitSegment(ctx, NewAnswerSegment(func(segment *AnswerSegment) {
+	stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
 		segment.rid = rid
 		segment.dummy = true
 	}))
@@ -606,7 +650,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	// Never wait for any response.
 	go func() {
 		defer gptChatStream.Close()
-		if err := handleChatResponseStream(ctx, rid, gptChatStream); err != nil {
+		if err := handleChatResponseStream(ctx, stage, rid, gptChatStream); err != nil {
 			logger.Ef(ctx, "Handle stream failed, err %+v", err)
 		}
 	}()
@@ -624,16 +668,30 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 // When user query the question state, which is identified by rid (request id).
 func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+	// The stage uuid, user must create it before upload question audio.
+	sid := r.URL.Query().Get("sid")
+	if sid == "" {
+		return errors.Errorf("empty sid")
+	}
+
+	stage := talkServer.QueryStage(sid)
+	if stage == nil {
+		return errors.Errorf("invalid sid %v", sid)
+	}
+
+	// Keep alive the stage.
+	stage.KeepAlive()
+	// Switch to the context of stage.
+	ctx = stage.loggingCtx
 
 	// The rid is the request id, which identify this request, generally a question.
 	rid := r.URL.Query().Get("rid")
 	if rid == "" {
 		return errors.Errorf("empty rid")
 	}
+	logger.Tf(ctx, "Stage: Query sid=%v, rid=%v", sid, rid)
 
-	segment := ttsWorker.QueryAnyReadySegment(ctx, rid)
+	segment := stage.ttsWorker.QueryAnyReadySegment(ctx, rid)
 	if segment == nil {
 		ohttp.WriteData(ctx, w, r, struct {
 			AnswerSegmentUUID string `json:"asid"`
@@ -642,19 +700,42 @@ func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *htt
 	}
 
 	ohttp.WriteData(ctx, w, r, struct {
-		Processing        bool   `json:"processing"`
+		// Whether is processing.
+		Processing bool `json:"processing"`
+		// The UUID for this answer segment.
 		AnswerSegmentUUID string `json:"asid"`
-		TTS               string `json:"tts"`
+		// The TTS text.
+		TTS string `json:"tts"`
 	}{
-		Processing:        segment.dummy || (!segment.ready && segment.err == nil),
+		// Whether is processing.
+		Processing: segment.dummy || (!segment.ready && segment.err == nil),
+		// The UUID for this answer segment.
 		AnswerSegmentUUID: segment.asid,
-		TTS:               segment.text,
+		// The TTS text.
+		TTS: segment.text,
 	})
 	return nil
 }
 
 // When user download the answer tts, which is identified by rid (request id) and aid (answer id)
 func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	// The stage uuid, user must create it before upload question audio.
+	sid := r.URL.Query().Get("sid")
+	if sid == "" {
+		return errors.Errorf("empty sid")
+	}
+
+	stage := talkServer.QueryStage(sid)
+	if stage == nil {
+		return errors.Errorf("invalid sid %v", sid)
+	}
+
+	// Keep alive the stage.
+	stage.KeepAlive()
+	// Switch to the context of stage.
+	ctx = stage.loggingCtx
+
+	// The rid is the request id, which identify this request, generally a question.
 	rid := r.URL.Query().Get("rid")
 	if rid == "" {
 		return errors.Errorf("empty rid")
@@ -664,8 +745,10 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 	if asid == "" {
 		return errors.Errorf("empty asid")
 	}
+	logger.Tf(ctx, "Stage: Download sid=%v, rid=%v, asid=%v", sid, rid, asid)
 
-	segment := ttsWorker.QuerySegment(rid, asid)
+	// Get the segment and response it.
+	segment := stage.ttsWorker.QuerySegment(rid, asid)
 	if segment == nil {
 		return errors.Errorf("no segment for %v %v", rid, asid)
 	}
@@ -683,6 +766,22 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 
 // When user remove the answer tts, which is identified by rid (request id) and aid (answer id)
 func handleRemoveAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	// The stage uuid, user must create it before upload question audio.
+	sid := r.URL.Query().Get("sid")
+	if sid == "" {
+		return errors.Errorf("empty sid")
+	}
+
+	stage := talkServer.QueryStage(sid)
+	if stage == nil {
+		return errors.Errorf("invalid sid %v", sid)
+	}
+
+	// Keep alive the stage.
+	stage.KeepAlive()
+	// Switch to the context of stage.
+	ctx = stage.loggingCtx
+
 	rid := r.URL.Query().Get("rid")
 	if rid == "" {
 		return errors.Errorf("empty rid")
@@ -692,14 +791,16 @@ func handleRemoveAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.R
 	if asid == "" {
 		return errors.Errorf("empty asid")
 	}
+	logger.Tf(ctx, "Stage: Remove sid=%v, rid=%v, asid=%v", sid, rid, asid)
 
-	segment := ttsWorker.QuerySegment(rid, asid)
+	// Notify to remove the segment.
+	segment := stage.ttsWorker.QuerySegment(rid, asid)
 	if segment == nil {
 		return errors.Errorf("no segment for %v %v", rid, asid)
 	}
 
 	// Remove it.
-	ttsWorker.RemoveSegment(asid)
+	stage.ttsWorker.RemoveSegment(asid)
 
 	select {
 	case <-ctx.Done():
@@ -721,10 +822,6 @@ func doMain(ctx context.Context) error {
 	// Create the talk server.
 	talkServer = NewTalkServer()
 	defer talkServer.Close()
-
-	// Cleanup TTS worker.
-	ttsWorker = NewTTSWorker()
-	defer ttsWorker.Close()
 
 	// Signal handler.
 	sigs := make(chan os.Signal, 1)
@@ -782,6 +879,13 @@ func doMain(ctx context.Context) error {
 		filename := r.URL.Path[len("/api/ai-talk/examples/"):]
 		if !strings.Contains(filename, ".") {
 			filename = fmt.Sprintf("%v.aac", filename)
+		}
+
+		// If there is an optional stage id, we will use the logging context of stage.
+		if sid := r.URL.Query().Get("sid"); sid != "" {
+			if stage := talkServer.QueryStage(sid); stage != nil {
+				ctx = stage.loggingCtx
+			}
 		}
 
 		ext := strings.Trim(path.Ext(filename), ".")

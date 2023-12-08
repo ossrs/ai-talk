@@ -44,15 +44,11 @@ function App() {
   const [robot, setRobot] = React.useState(null);
   const [stageUUID, setStageUUID] = React.useState(null);
 
-  // Whether user click the start, we're trying to start the stage.
-  const [starting, setStarting] = React.useState(false);
   // Whether stage is starged, user're allowd to talk with AI.
   const [started, setStarted] = React.useState(false);
 
   // The player ref, to access the audio player.
   const playerRef = React.useRef(null);
-  // Whether audio player is available to play or replay.
-  const [playerAvailable, setPlayerAvailable] = React.useState(false);
 
   // Verbose(detail) and info(summary) logs, show in the log panel.
   const [showVerboseLogs, setShowVerboseLogs] = React.useState(false);
@@ -85,34 +81,27 @@ function App() {
 
   // User start a stage.
   const onStartStage = React.useCallback(async (uuid, robot) => {
-    try {
-      setStarting(true);
-      verbose("Start the app");
+    verbose("Start the app");
 
-      setStageUUID(uuid);
-      setRobot(robot);
+    setStageUUID(uuid);
+    setRobot(robot);
 
-      // Play the welcome audio.
-      await new Promise(resolve => {
-        verbose(`Start: Play hello welcome audio`);
+    // Play the welcome audio.
+    await new Promise(resolve => {
+      verbose(`Start: Play hello welcome audio`);
 
-        setPlayerAvailable(true);
-        playerRef.current.src = `/api/ai-talk/examples/${robot.voice}?sid=${uuid}`;
-
-        playerRef.current.play()
-          .catch(error => alert(`Play error: ${error}`));
-        playerRef.current.addEventListener('ended', () => {
-          resolve();
-        });
+      playerRef.current.src = `/api/ai-talk/examples/${robot.voice}?sid=${uuid}`;
+      playerRef.current.play()
+        .catch(error => alert(`Play error: ${error}`));
+      playerRef.current.addEventListener('ended', () => {
+        resolve();
       });
+    });
 
-      setStarted(true);
-      info(`Stage started, AI is ready`);
-      verbose(`Stage started, AI is ready, sid=${uuid}`);
-    } finally {
-      setStarting(false);
-    }
-  }, [verbose, playerRef, setPlayerAvailable, setRobot, setStageUUID, setStarting, setStarted]);
+    setStarted(true);
+    info(`Stage started, AI is ready`);
+    verbose(`Stage started, AI is ready, sid=${uuid}`);
+  }, [verbose, playerRef, setRobot, setStageUUID, setStarted]);
 
   return <>
     {robot && <p style={{textAlign: 'right'}}>
@@ -138,7 +127,7 @@ function App() {
     </div>}
     {robot && <AppImpl {...{
       info, verbose, robot, started, showVerboseLogs, verboseLogs, infoLogs,
-      stageUUID, playerRef, setPlayerAvailable,
+      stageUUID, playerRef,
     }}/>}
     <p><audio ref={playerRef} controls={true} hidden={!showVerboseLogs} /></p>
   </>;
@@ -253,7 +242,7 @@ function SelectRobot({info, verbose, onStartStage}) {
   </>;
 }
 
-function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, playerRef, setPlayerAvailable}) {
+function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, playerRef}) {
   const isMobile = useIsMobile();
   const isOssrsNet = useIsOssrsNet();
 
@@ -268,6 +257,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
 
   // The refs, about the logs and audio chunks model.
   const ref = React.useRef({
+    isRecording: false,
     stopHandler: null,
     mediaRecorder: null,
     audioChunks: [],
@@ -278,6 +268,8 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     if (ref.current.mediaRecorder) return;
     if (!started) return;
+    if (ref.current.isRecording) return;
+    ref.current.isRecording = true;
 
     setRecording(true);
     verbose("=============");
@@ -388,7 +380,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
           // All audios are played.
           if (!audioSegmentUUID) {
             verbose(`TTS: All audios are played, rid=${requestUUID}`);
-            verbose("===========================");
+            verbose("=============");
             break;
           }
 
@@ -405,8 +397,6 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
             playerRef.current.addEventListener('ended', listener);
 
             playerRef.current.src = url;
-            setPlayerAvailable(true);
-
             playerRef.current.play().catch(error => {
               verbose(`TTS: Play ${url} failed: ${error}`);
               resolve();
@@ -438,7 +428,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
     }, 800);
-  }, [info, verbose, playerRef, setPlayerAvailable, stageUUID, robot, ref, setProcessing, setRecording, setAttention]);
+  }, [info, verbose, playerRef, stageUUID, robot, ref, setProcessing, setRecording, setAttention]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -467,9 +457,8 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
   const onClickWelcomeAudio = React.useCallback(() => {
     verbose(`Play example aac audio`);
     playerRef.current.src = `/api/ai-talk/examples/hello.aac`;
-    setPlayerAvailable(true);
     playerRef.current.play();
-  }, [verbose, playerRef, setPlayerAvailable, playerRef]);
+  }, [verbose, playerRef]);
 
   return <div className="App">
     <header onTouchStart={startRecording} onTouchEnd={stopRecording} className="App-header">

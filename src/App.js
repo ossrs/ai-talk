@@ -56,8 +56,12 @@ function App() {
   const [verboseLogs, setVerboseLogs] = React.useState([]);
   const [infoLogs, setInfoLogs] = React.useState([]);
 
-  // The refs, about the player and under layer record and audio chunks model.
+  // The player ref, to access the audio player.
   const playerRef = React.useRef(null);
+  // Whether audio player is available to play or replay.
+  const [playerAvailable, setPlayerAvailable] = React.useState(false);
+
+  // The refs, about the logs and audio chunks model.
   const ref = React.useRef({
     mediaRecorder: null,
     audioChunks: [],
@@ -94,16 +98,7 @@ function App() {
       setStarting(true);
       verbose("Start the app");
 
-      await new Promise(resolve => {
-        verbose(`Start: Play hello welcome audio`);
-        playerRef.current.src = "/api/ai-talk/examples/hello.aac";
-        playerRef.current.play()
-          .catch(error => alert(`Play error: ${error}`));
-        playerRef.current.addEventListener('ended', () => {
-          resolve();
-        });
-      });
-
+      // Create a new stage.
       const stageUUID = await new Promise((resolve, reject) => {
         verbose(`Start: Create a new stage`);
 
@@ -117,7 +112,22 @@ function App() {
         }).catch((error) => reject(error));
       });
 
-      const stream = await new Promise(resolve => {
+      // Play the welcome audio.
+      await new Promise(resolve => {
+        verbose(`Start: Play hello welcome audio`);
+
+        setPlayerAvailable(true);
+        playerRef.current.src = "/api/ai-talk/examples/hello.aac";
+
+        playerRef.current.play()
+          .catch(error => alert(`Play error: ${error}`));
+        playerRef.current.addEventListener('ended', () => {
+          resolve();
+        });
+      });
+
+      // Try to open the microphone to request permission.
+      await new Promise(resolve => {
         verbose(`Start: Open microphone`);
 
         navigator.mediaDevices.getUserMedia(
@@ -131,8 +141,13 @@ function App() {
             audioChunks.push(data);
           });
           recorder.addEventListener("stop", async () => {
+            // Stop the microphone.
             verbose(`Start: Microphone ok, chunks=${audioChunks.length}, state=${recorder.state}`);
-            resolve(stream);
+            stream.getTracks().forEach(track => track.stop());
+            setTimeout(() => {
+              verbose(`Start: Microphone test ok.`);
+              resolve();
+            }, 500);
           });
 
           recorder.start();
@@ -143,20 +158,13 @@ function App() {
         }).catch(error => alert(`Open microphone error: ${error}`));
       });
 
-      await new Promise(resolve => {
-        stream.getTracks().forEach(track => track.stop());
-        setTimeout(() => {
-          resolve();
-        }, 200);
-      });
-
       setStarted(true);
       info(`Stage started, AI is ready`);
       verbose(`Stage started, AI is ready, sid=${stageUUID}`);
     } finally {
       setStarting(false);
     }
-  }, [verbose, info, setStarted, playerRef]);
+  }, [verbose, info, setStarted, playerRef, setPlayerAvailable]);
 
   // User start a conversation, by recording input.
   const startRecording = React.useCallback(async () => {
@@ -277,6 +285,8 @@ function App() {
           playerRef.current.addEventListener('ended', listener);
 
           playerRef.current.src = url;
+          setPlayerAvailable(true);
+
           playerRef.current.play().catch(error => {
             verbose(`TTS: Play ${url} failed: ${error}`);
             resolve();
@@ -302,7 +312,7 @@ function App() {
       setWorking(false);
       ref.current.mediaRecorder = null;
     }
-  }, [verbose, info, setWorking, ref, setProcessing, playerRef]);
+  }, [verbose, info, setWorking, ref, setProcessing, playerRef, setPlayerAvailable]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -346,12 +356,14 @@ function App() {
         disabled={processing}
       >{isMobile ? 'Press to talk' : 'Press the R key to talk'}</button>}
     </header>
-    <p><audio ref={playerRef} controls={true} hidden={false} /></p>
+    <p><audio ref={playerRef} controls={true} hidden={!playerAvailable} /></p>
     <p>
-      <button onClick={(e) => {
-        verbose(`Replay last audio`);
-        playerRef.current.play();
-      }}>Replay audio</button> &nbsp;
+      {playerAvailable && <React.Fragment>
+        <button onClick={(e) => {
+          verbose(`Replay last audio`);
+          playerRef.current.play();
+        }}>Replay audio</button> &nbsp;
+      </React.Fragment>}
       <button onClick={(e) => {
         setShowVerboseLogs(!showVerboseLogs);
       }}>{!showVerboseLogs ? 'Debugging' : 'Quit debugging'}</button> &nbsp;
@@ -359,6 +371,7 @@ function App() {
         <button onClick={(e) => {
           verbose(`Play example aac audio`);
           playerRef.current.src = "/api/ai-talk/examples/hello.aac";
+          setPlayerAvailable(true);
           playerRef.current.play();
         }}>Welcome audio</button> &nbsp;
       </React.Fragment>}

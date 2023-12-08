@@ -84,7 +84,7 @@ Optionally, you might need to set the following environment variables:
   * To make sure AI response limit words to avoid long audio, we always append `Keep your reply neat, limiting the reply to ${AIT_REPLY_LIMIT} words.` to system prompt.
   * You can set `AIT_REPLY_LIMIT` to limit the words of AI response, default to `50`.
   * Please use `AIT_EXTRA_ROBOTS` to set the number of extra robots, default to `0`.
-* `AIT_CHAT_MODEL`: The AI model, default to `gpt-4-1106-preview` which is the latest model. See [link](https://platform.openai.com/docs/models).
+* `AIT_CHAT_MODEL`: The AI model, default to `gpt-3.5-turbo-1106` which is good enough. See [link](https://platform.openai.com/docs/models).
   * `gpt-4-1106-preview`: The latest GPT-4 model with improved instruction following, JSON mode, reproducible outputs, parallel function calling, and more.
   * `gpt-3.5-turbo-1106`: The latest GPT-3.5 Turbo model with improved instruction following, JSON mode, reproducible outputs, parallel function calling, and more.
   * `gpt-3.5-turbo`: Our most capable and cost effective model in the GPT-3.5 family.
@@ -149,5 +149,6 @@ The changelog:
   * Support multiple assistants and select before start. v1.0.11
   * Setup model and robots by environment variables. [v1.0.12](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.12)
   * Fix Android browser select button label issue. v1.0.13
+  * Add micWorking and attention state to avoid data loss. v1.0.13
 
 Winlin, 2023.12

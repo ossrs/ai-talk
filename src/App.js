@@ -56,6 +56,10 @@ function App() {
   const [working, setWorking] = React.useState(false);
   // Whether user is recording the input audio.
   const [recording, setRecording] = React.useState(false);
+  // Whether microphone is really working, when state change to active.
+  const [micWorking, setMicWorking] = React.useState(false);
+  // Whether should be attention to the user, such as processing the user input.
+  const [attention, setAttention] = React.useState(false);
   // Whether AI is processing the user input and generating the response.
   const [processing, setProcessing] = React.useState(false);
 
@@ -205,14 +209,19 @@ function App() {
 
     // See https://www.sitelint.com/lab/media-recorder-supported-mime-type/
     ref.current.mediaRecorder = new MediaRecorder(stream);
+    ref.current.mediaRecorder.addEventListener("start", () => {
+      verbose(`Event: Recording start to record`);
+      setMicWorking(true);
+      setAttention(true);
+    });
     ref.current.mediaRecorder.addEventListener("dataavailable", ({ data }) => {
       ref.current.audioChunks.push(data);
-      verbose(`Event: dataavailable ${data.size} bytes`);
+      verbose(`Event: Device dataavailable event ${data.size} bytes`);
     });
 
     ref.current.mediaRecorder.start();
     verbose(`Event: Recording started`);
-  }, [verbose, info, setWorking, ref]);
+  }, [verbose, info, setWorking, ref, setMicWorking, setAttention]);
 
   // User stop a conversation, by uploading input and playing response.
   const stopRecording = React.useCallback(async () => {
@@ -230,6 +239,7 @@ function App() {
     });
 
     setRecording(false);
+    setMicWorking(false);
     setProcessing(true);
     verbose(`Event: Recoder stopped, chunks=${ref.current.audioChunks.length}`);
 
@@ -332,9 +342,10 @@ function App() {
     } finally {
       setProcessing(false);
       setWorking(false);
+      setAttention(false);
       ref.current.mediaRecorder = null;
     }
-  }, [verbose, info, setWorking, ref, setProcessing, playerRef, setPlayerAvailable, setRecording]);
+  }, [verbose, info, setWorking, ref, setProcessing, playerRef, setPlayerAvailable, setRecording, setAttention]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -375,9 +386,9 @@ function App() {
             stopRecording();
           }, 800);
         }}
-        className={working ? 'DynamicButton' : 'StaticButton'}
+        className={!attention ? 'StaticButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}
         disabled={processing}
-      >{recording ? '' : processing ? 'Processing' : (isMobile ? 'Press to talk' : 'Press the R key to talk')}</button>}
+      >{recording ? '' : processing ? 'Processing' : (isMobile ? 'Press to talk' : 'Press the R key')}</button>}
     </header>
     <p><audio ref={playerRef} controls={true} hidden={!playerAvailable} /></p>
     <p>

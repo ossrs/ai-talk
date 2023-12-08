@@ -2,11 +2,25 @@
   text-align: center;
 }
 
-.StaticButton, .DynamicButton {
-  width: 200px;
-  height: 200px;
+.StaticButton {
+  width: 170px;
+  height: 170px;
+  border-radius: 20%;
+  user-select:none;
+}
+
+.DynamicButton, .RecordingButton {
+  width: 190px;
+  height: 190px;
   border-radius: 30%;
   user-select:none;
+}
+
+.RecordingButton {
+  width: 200px;
+  height: 200px;
+  border-radius: 40%;
+  background-color: rgba(157, 238, 91, 0.7);
 }
 
 .StartButton {
@@ -25,7 +39,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .DynamicButton {
+  .DynamicButton, .RecordingButton {
     animation: App-logo-spin infinite 20s linear;
   }
 }

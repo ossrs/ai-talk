@@ -1,5 +1,6 @@
 import React from 'react';
 import './App.css';
+import {RobotConfig} from "./utils";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState(false);
@@ -143,7 +144,7 @@ function SelectRobot({info, verbose, onStartStage}) {
 
   // The available robots for user to select.
   const [robots, setRobots] = React.useState([]);
-  const [robot, setRobot] = React.useState(null);
+  const [robot, setRobot] = React.useState(RobotConfig.load());
   const [uuid, setUUID] = React.useState(null);
 
   // The application is started now.
@@ -206,15 +207,27 @@ function SelectRobot({info, verbose, onStartStage}) {
       verbose(`Start: Create stage success: ${data.data.sid}, ${data.data.robots.length} robots`);
       setUUID(data.data.sid);
       setRobots(data.data.robots);
+
+      const config = RobotConfig.load();
+      if (config) {
+        const robot = data.data.robots.find(robot => robot.uuid === config.uuid);
+        if (robot) {
+          setRobot(robot);
+          info(`Use previous robot ${robot.label}`);
+          verbose(`Use previous robot ${robot.label} ${robot.uuid}`);
+        }
+      }
+
       setLoading(false);
     }).catch((error) => alert(`Create stage error: ${error}`));
-  }, [setLoading, setRobots, allowed, setUUID]);
+  }, [setLoading, setRobots, setRobot, allowed, setUUID]);
 
   // User select a robot.
   const onSelectRobot = React.useCallback((e) => {
     if (!e.target.value) return;
     const robot = robots.find(robot => robot.uuid === e.target.value);
     setRobot(robot);
+    RobotConfig.save(robot);
     info(`Change to robot ${robot.label}`);
     verbose(`Change to robot ${robot.label} ${robot.uuid}`);
   }, [robots, setRobot]);
@@ -226,7 +239,7 @@ function SelectRobot({info, verbose, onStartStage}) {
     <p>
       {robots?.length ? <React.Fragment>
         Assistant: &nbsp;
-        <select onChange={(e) => onSelectRobot(e)}>
+        <select defaultValue={robot?.uuid} onChange={(e) => onSelectRobot(e)}>
           <option value=''>Please select a robot</option>
           {robots.map(robot => {
             return <option key={robot.uuid} value={robot.uuid}>{robot.label}</option>;

@@ -132,4 +132,14 @@ docker run -v /path/to/domain.crt:/g/server.crt -v /path/to/domain.key:/g/server
 
 Please make sure the file `/path/to/domain.crt` and `/path/to/domain.key` exists.
 
+## Changelog
+
+The changelog:
+
+* v1.0:
+  * Support mobile and PC browser. v1.0.0
+  * Limit the response words to 50 words by default. v1.0.10
+  * Support multiple assistants and select before start. v1.0.11
+  * Setup model and robots by environment variables. [v1.0.12](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.12)
+
 Winlin, 2023.12

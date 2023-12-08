@@ -73,18 +73,18 @@ Then you can access by https://your-server-ip from your mobile browser.
 
 ## Environment Variables
 
-Required environment variables:
+Necessary environment variables that you must configure:
 
 * `OPENAI_API_KEY`: The OpenAI API key, get from [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys).
 
-Optional environment variables:
+Optionally, you might need to set the following environment variables:
 
 * `OPENAI_PROXY`: The OpenAI API proxy, default to `api.openai.com`, which directly access OpenAI API without proxy.
 * `AIT_SYSTEM_PROMPT`: The system prompt, default to `You are a helpful assistant.`.
   * To make sure AI response limit words to avoid long audio, we always append `Keep your reply neat, limiting the reply to ${AIT_REPLY_LIMIT} words.` to system prompt.
   * You can set `AIT_REPLY_LIMIT` to limit the words of AI response, default to `50`.
   * Please use `AIT_EXTRA_ROBOTS` to set the number of extra robots, default to `0`.
-* `AIT_CHAT_MODEL`: The AI model, default to `gpt-4-1106-preview` which is the latest model.
+* `AIT_CHAT_MODEL`: The AI model, default to `gpt-4-1106-preview` which is the latest model. See [link](https://platform.openai.com/docs/models).
 * `AIT_ASR_LANGUAGE`: The language for Whisper ASR, default to `en`, see [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes), bellow are some examples:
   * `en`: English
   * `zh`: Chinese
@@ -96,8 +96,19 @@ Optional environment variables:
   * `pt`: Portuguese
   * `ru`: Russian
   * `es`: Spanish
+* `AIT_ASR_MODEL`: The model for Whisper ASR, default to `whisper-1`. See [link](https://platform.openai.com/docs/api-reference/audio/createTranscription).
+* `AIT_TTS_VOICE`: The void for OpenAI TTS, default to `nova`. Supported voices are `alloy`, `echo`, `fable`, `onyx`, `nova`, and `shimmer`. See [link](https://platform.openai.com/docs/api-reference/audio/createSpeech).
+* `AIT_TTS_MODEL`: The model to use for OpenAI TTS, default to `tts-1`. See [link](https://platform.openai.com/docs/api-reference/audio/createSpeech)
 
-Other optional environment variables:
+Optionally, additional robots can be incorporated into various environments:
+
+* `AIT_EXTRA_ROBOTS`: The number of extra robots, default to `0`.
+* `AIT_ROBOT_0_LABEL`: The label for extra robot `#0`, for example, `English Spoken Coach`.
+* `AIT_ROBOT_0_PROMPT`: The prompt for extra robot `#0`, for example, `I want you to act as a spoken English teacher and improver.`.
+* `AIT_ROBOT_0_ASR_LANGUAGE`: The language for extra robot `#0`, see `AIT_ASR_LANGUAGE`, default to `en`.
+* `AIT_ROBOT_0_PREFIX`: (Optional) The prefix for the first sentence for extra robot `#0`, see `AIT_REPLY_PREFIX`.
+
+Less frequently used optional environment variables:
 
 * `AIT_HTTP_LISTEN`: The HTTP listen address, default to `:3000`, please use `-p 80:3000` to map to a different port.
 * `AIT_HTTPS_LISTEN`: The HTTPS listen address, default to `:3443`, please use `-p 443:3443` to map to a different port.
@@ -110,14 +121,6 @@ Other optional environment variables:
 * `AIT_CHAT_WINDOW`: The AI chat window to store historical messages, default to `5`.
 * `AIT_DEFAULT_ROBOT`: Whether enable the default robot, prompt is `AIT_SYSTEM_PROMPT`, default to `true`.
 * `AIT_STAGE_TIMEOUT`: The timeout in seconds for each stage, default to `300`.
-
-The extra robots can be added by environments:
-
-* `AIT_EXTRA_ROBOTS`: The number of extra robots, default to `0`.
-* `AIT_ROBOT_0_LABEL`: The label for extra robot `#0`, for example, `English Spoken Coach`.
-* `AIT_ROBOT_0_PROMPT`: The prompt for extra robot `#0`, for example, `I want you to act as a spoken English teacher and improver.`.
-* `AIT_ROBOT_0_ASR_LANGUAGE`: The language for extra robot `#0`, see `AIT_ASR_LANGUAGE`, default to `en`.
-* `AIT_ROBOT_0_PREFIX`: (Optional) The prefix for the first sentence for extra robot `#0`, see `AIT_REPLY_PREFIX`.
 
 ## HTTPS Certificate
 

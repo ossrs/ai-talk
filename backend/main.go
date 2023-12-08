@@ -351,9 +351,9 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, stage *Stage, segment *An
 		if err := func() error {
 			client := openai.NewClientWithConfig(aiConfig)
 			resp, err := client.CreateSpeech(ctx, openai.CreateSpeechRequest{
-				Model:          openai.TTSModel1,
+				Model:          openai.SpeechModel(os.Getenv("AIT_TTS_MODEL")),
 				Input:          segment.text,
-				Voice:          openai.VoiceNova,
+				Voice:          openai.SpeechVoice(os.Getenv("AIT_TTS_VOICE")),
 				ResponseFormat: openai.SpeechResponseFormatAac,
 			})
 			if err != nil {
@@ -637,17 +637,11 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 
 	// Do ASR, convert to text.
-	var config openai.ClientConfig
-	config = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
-	if os.Getenv("OPENAI_PROXY") != "" {
-		config.BaseURL = fmt.Sprintf("http://%v/v1", os.Getenv("OPENAI_PROXY"))
-	}
-
-	client := openai.NewClientWithConfig(config)
+	client := openai.NewClientWithConfig(aiConfig)
 	resp, err := client.CreateTranscription(
 		ctx,
 		openai.AudioRequest{
-			Model:    openai.Whisper1,
+			Model:    os.Getenv("AIT_ASR_MODEL"),
 			FilePath: outputFile,
 			Format:   openai.AudioResponseFormatJSON,
 			Language: robot.asrLanguage,
@@ -1194,6 +1188,9 @@ func doConfig(ctx context.Context) error {
 	setEnvDefault("AIT_EXTRA_ROBOTS", "0")
 	setEnvDefault("AIT_DEFAULT_ROBOT", "true")
 	setEnvDefault("AIT_STAGE_TIMEOUT", "300")
+	setEnvDefault("AIT_TTS_VOICE", string(openai.VoiceNova))
+	setEnvDefault("AIT_TTS_MODEL", string(openai.TTSModel1))
+	setEnvDefault("AIT_ASR_MODEL", openai.Whisper1)
 
 	// Load env variables from file.
 	if _, err := os.Stat("../.env"); err == nil {
@@ -1208,13 +1205,15 @@ func doConfig(ctx context.Context) error {
 	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, AIT_HTTP_LISTEN=%v, AIT_HTTPS_LISTEN=%v, "+
 		"AIT_PROXY_STATIC=%v, AIT_REPLY_PREFIX=%v, AIT_SYSTEM_PROMPT=%v, AIT_CHAT_MODEL=%v, AIT_MAX_TOKENS=%v, "+
 		"AIT_TEMPERATURE=%v, AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v, AIT_CHAT_WINDOW=%v, "+
-		"AIT_EXTRA_ROBOTS=%v, AIT_DEFAULT_ROBOT=%v, AIT_STAGE_TIMEOUT=%v",
+		"AIT_EXTRA_ROBOTS=%v, AIT_DEFAULT_ROBOT=%v, AIT_STAGE_TIMEOUT=%v, AIT_TTS_VOICE=%v, AIT_TTS_MODEL=%v, "+
+		"AIT_ASR_MODEL=%v",
 		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("AIT_HTTP_LISTEN"),
 		os.Getenv("AIT_HTTPS_LISTEN"), os.Getenv("AIT_PROXY_STATIC"), os.Getenv("AIT_REPLY_PREFIX"),
 		os.Getenv("AIT_SYSTEM_PROMPT"), os.Getenv("AIT_CHAT_MODEL"), os.Getenv("AIT_MAX_TOKENS"),
 		os.Getenv("AIT_TEMPERATURE"), os.Getenv("AIT_KEEP_FILES"), os.Getenv("AIT_ASR_LANGUAGE"),
 		os.Getenv("AIT_REPLY_LIMIT"), os.Getenv("AIT_CHAT_WINDOW"), os.Getenv("AIT_EXTRA_ROBOTS"),
-		os.Getenv("AIT_DEFAULT_ROBOT"), os.Getenv("AIT_STAGE_TIMEOUT"),
+		os.Getenv("AIT_DEFAULT_ROBOT"), os.Getenv("AIT_STAGE_TIMEOUT"), os.Getenv("AIT_TTS_VOICE"),
+		os.Getenv("AIT_TTS_MODEL"), os.Getenv("AIT_ASR_MODEL"),
 	)
 
 	// Config all robots.

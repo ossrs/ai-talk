@@ -82,29 +82,6 @@ function App() {
     document.title = "AI Talk";
   }, []);
 
-  // Setup the keyboard event, for PC browser.
-  React.useEffect(() => {
-    if (!started) return;
-
-    const handleKeyDown = (e) => {
-      if (e.key !== 'r' && e.key !== '\\') return;
-      startRecording();
-    };
-    const handleKeyUp = (e) => {
-      if (e.key !== 'r' && e.key !== '\\') return;
-      setTimeout(() => {
-        stopRecording();
-      }, 800);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [started]);
-
   // The application is started now.
   React.useEffect(() => {
     verbose('App started');
@@ -327,6 +304,29 @@ function App() {
     }
   }, [verbose, info, setWorking, ref, setProcessing, playerRef]);
 
+  // Setup the keyboard event, for PC browser.
+  React.useEffect(() => {
+    if (!started) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key !== 'r' && e.key !== '\\') return;
+      startRecording();
+    };
+    const handleKeyUp = (e) => {
+      if (e.key !== 'r' && e.key !== '\\') return;
+      setTimeout(() => {
+        stopRecording();
+      }, 800);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [started, startRecording, stopRecording]);
+
   return (<div className="App">
     <header className="App-header">
       {!started && <button
@@ -371,7 +371,7 @@ function App() {
         return (<li key={index}>{log}</li>);
       })}
     </ul>
-    {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk"/>}
+    {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk" alt=''/>}
   </div>);
 }
 

@@ -24,8 +24,8 @@
 }
 
 .StartButton {
-  width: 120px;
-  height: 30px;
+  width: 150px;
+  height: 35px;
 }
 
 .LogPanel {
@@ -33,6 +33,14 @@
   min-height: 35vh;
   overflow: scroll;
   height: 35vh;
+}
+
+.SelectRobot, .SelectRobotDiv, .StartButton {
+  font-size: 18px;
+}
+
+.SelectRobotDiv {
+  padding: 10px;
 }
 
 .LogGif {

@@ -194,14 +194,15 @@ function SelectRobot({info, verbose, onStartStage}) {
     verbose(`Change to robot ${robot.label} ${robot.uuid}`);
   }, [robots, setRobot]);
 
-  return <>
+  return <div className='SelectRobotDiv'>
     {!booting && !allowed && <p style={{color: "red"}}>
       Error: Only allow localhost or https to access microphone.
     </p>}
     <p>
       {robots?.length ? <React.Fragment>
         Assistant: &nbsp;
-        <select defaultValue={robot?.uuid} onChange={(e) => onSelectRobot(e)}>
+        <select className='SelectRobot' defaultValue={robot?.uuid}
+                onChange={(e) => onSelectRobot(e)}>
           <option value=''>Please select a robot</option>
           {robots.map(robot => {
             return <option key={robot.uuid} value={robot.uuid}>{robot.label}</option>;
@@ -214,7 +215,7 @@ function SelectRobot({info, verbose, onStartStage}) {
         onStartStage(uuid, robot);
       }}>Next</button>}
     </p>
-  </>;
+  </div>;
 }
 
 function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, playerRef}) {

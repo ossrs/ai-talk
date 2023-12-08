@@ -54,6 +54,8 @@ function App() {
   const [started, setStarted] = React.useState(false);
   // Whether user is having a conversation with AI, from user speak, util AI speak.
   const [working, setWorking] = React.useState(false);
+  // Whether user is recording the input audio.
+  const [recording, setRecording] = React.useState(false);
   // Whether AI is processing the user input and generating the response.
   const [processing, setProcessing] = React.useState(false);
 
@@ -189,6 +191,7 @@ function App() {
     if (ref.current.mediaRecorder) return;
 
     setWorking(true);
+    setRecording(true);
     verbose("=============");
     info("=============");
 
@@ -226,6 +229,7 @@ function App() {
       ref.current.mediaRecorder.stop();
     });
 
+    setRecording(false);
     setProcessing(true);
     verbose(`Event: Recoder stopped, chunks=${ref.current.audioChunks.length}`);
 
@@ -330,7 +334,7 @@ function App() {
       setWorking(false);
       ref.current.mediaRecorder = null;
     }
-  }, [verbose, info, setWorking, ref, setProcessing, playerRef, setPlayerAvailable]);
+  }, [verbose, info, setWorking, ref, setProcessing, playerRef, setPlayerAvailable, setRecording]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -373,7 +377,7 @@ function App() {
         }}
         className={working ? 'DynamicButton' : 'StaticButton'}
         disabled={processing}
-      >{processing ? 'Processing' : isMobile ? 'Press to talk' : 'Press the R key to talk'}</button>}
+      >{recording ? '' : processing ? 'Processing' : (isMobile ? 'Press to talk' : 'Press the R key to talk')}</button>}
     </header>
     <p><audio ref={playerRef} controls={true} hidden={!playerAvailable} /></p>
     <p>

@@ -5,8 +5,8 @@
 .StaticButton, .DynamicButton {
   width: 200px;
   height: 200px;
-  user-select: none;
   border-radius: 30%;
+  user-select:none;
 }
 
 .StartButton {

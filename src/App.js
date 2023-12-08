@@ -42,6 +42,10 @@ function App() {
   const isMobile = useIsMobile();
   const isOssrsNet = useIsOssrsNet();
 
+  // Whether system is booting.
+  const [booting, setBooting] = React.useState(true);
+  // Whether system checking, such as should be HTTPS.
+  const [allowed, setAllowed] = React.useState(false);
   // Whether we're loading the page and request permission.
   const [loading, setLoading] = React.useState(true);
   // Whether user click the start, we're trying to start the stage.
@@ -94,11 +98,20 @@ function App() {
 
   // The application is started now.
   React.useEffect(() => {
-    verbose('App started');
-  }, [info, verbose]);
+    // Only allow localhost or https to access microphone.
+    const isLo = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isHttps = window.location.protocol === 'https:';
+    const securityAllowed = isLo || isHttps;
+    securityAllowed || info(`App started, allowed=${securityAllowed}`);
+    verbose(`App started, allowed=${securityAllowed}, lo=${isLo}, https=${isHttps}`);
+    setAllowed(securityAllowed);
+    setBooting(false);
+  }, [info, verbose, setAllowed, setBooting]);
 
   // Request permission to use microphone.
   React.useEffect(() => {
+    if (!allowed) return;
+
     verbose(`Start: Create a new stage`);
 
     fetch('/api/ai-talk/start/', {
@@ -113,7 +126,7 @@ function App() {
       setRobots(data.data.robots);
       setLoading(false);
     }).catch((error) => alert(`Create stage error: ${error}`));
-  }, [ref, setLoading, setRobots, info, verbose]);
+  }, [ref, setLoading, setRobots, info, verbose, allowed]);
 
   // User start a stage.
   const onStartStage = React.useCallback(async () => {
@@ -348,6 +361,7 @@ function App() {
 
   return (<div className="App">
     <header className="App-header">
+      {!booting && !allowed && <p>Error: Only allow localhost or https to access microphone.</p>}
       {!loading && !started && <button
         disabled={starting} className='StartButton' onClick={(e) => {
           onStartStage();
@@ -367,8 +381,8 @@ function App() {
     </header>
     <p><audio ref={playerRef} controls={true} hidden={!playerAvailable} /></p>
     <p>
-      {robots?.length && <React.Fragment>
-        Robots: <select disabled={starting || started} onChange={(e) => {
+      {robots?.length ? <React.Fragment>
+        Assistant: <select disabled={starting || started} onChange={(e) => {
           const robot = robots.find(robot => robot.uuid === e.target.value);
           ref.current.robotUUID = robot.uuid;
           info(`Change to robot ${robot.label}`);
@@ -378,7 +392,7 @@ function App() {
           return <option key={robot.uuid} value={robot.uuid}>{robot.label}</option>;
         })}
       </select> &nbsp;
-      </React.Fragment>}
+      </React.Fragment> : ''}
       {playerAvailable && <React.Fragment>
         <button onClick={(e) => {
           verbose(`Replay last audio`);

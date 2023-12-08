@@ -109,6 +109,7 @@ Other optional environment variables:
 * `AIT_REPLY_LIMIT`: The AI reply limit words, default to `50`.
 * `AIT_CHAT_WINDOW`: The AI chat window to store historical messages, default to `5`.
 * `AIT_DEFAULT_ROBOT`: Whether enable the default robot, prompt is `AIT_SYSTEM_PROMPT`, default to `true`.
+* `AIT_STAGE_TIMEOUT`: The timeout in seconds for each stage, default to `300`.
 
 The extra robots can be added by environments:
 

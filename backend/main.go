@@ -119,6 +119,11 @@ func (v *Stage) Expired() bool {
 	if os.Getenv("AIT_DEVELOPMENT") == "true" {
 		return time.Since(v.update) > 30*time.Second
 	}
+
+	if to, err := strconv.ParseInt(os.Getenv("AIT_STAGE_TIMEOUT"), 10, 64); err == nil {
+		return time.Since(v.update) > time.Duration(to)*time.Second
+	}
+
 	return time.Since(v.update) > 300*time.Second
 }
 
@@ -1184,6 +1189,7 @@ func doConfig(ctx context.Context) error {
 	setEnvDefault("AIT_CHAT_WINDOW", "5")
 	setEnvDefault("AIT_EXTRA_ROBOTS", "0")
 	setEnvDefault("AIT_DEFAULT_ROBOT", "true")
+	setEnvDefault("AIT_STAGE_TIMEOUT", "300")
 
 	// Load env variables from file.
 	if _, err := os.Stat("../.env"); err == nil {
@@ -1198,13 +1204,13 @@ func doConfig(ctx context.Context) error {
 	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, AIT_HTTP_LISTEN=%v, AIT_HTTPS_LISTEN=%v, "+
 		"AIT_PROXY_STATIC=%v, AIT_REPLY_PREFIX=%v, AIT_SYSTEM_PROMPT=%v, AIT_CHAT_MODEL=%v, AIT_MAX_TOKENS=%v, "+
 		"AIT_TEMPERATURE=%v, AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v, AIT_CHAT_WINDOW=%v, "+
-		"AIT_EXTRA_ROBOTS=%v, AIT_DEFAULT_ROBOT=%v",
+		"AIT_EXTRA_ROBOTS=%v, AIT_DEFAULT_ROBOT=%v, AIT_STAGE_TIMEOUT=%v",
 		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("AIT_HTTP_LISTEN"),
 		os.Getenv("AIT_HTTPS_LISTEN"), os.Getenv("AIT_PROXY_STATIC"), os.Getenv("AIT_REPLY_PREFIX"),
 		os.Getenv("AIT_SYSTEM_PROMPT"), os.Getenv("AIT_CHAT_MODEL"), os.Getenv("AIT_MAX_TOKENS"),
 		os.Getenv("AIT_TEMPERATURE"), os.Getenv("AIT_KEEP_FILES"), os.Getenv("AIT_ASR_LANGUAGE"),
 		os.Getenv("AIT_REPLY_LIMIT"), os.Getenv("AIT_CHAT_WINDOW"), os.Getenv("AIT_EXTRA_ROBOTS"),
-		os.Getenv("AIT_DEFAULT_ROBOT"),
+		os.Getenv("AIT_DEFAULT_ROBOT"), os.Getenv("AIT_STAGE_TIMEOUT"),
 	)
 
 	// Config all robots.

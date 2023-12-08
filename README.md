@@ -106,6 +106,7 @@ Optionally, you might need to set the following environment variables:
 Optionally, additional robots can be incorporated into various environments:
 
 * `AIT_EXTRA_ROBOTS`: The number of extra robots, default to `0`.
+* `AIT_ROBOT_0_ID`: The id for extra robot `#0`, for example, `english-spoken-coach`.
 * `AIT_ROBOT_0_LABEL`: The label for extra robot `#0`, for example, `English Spoken Coach`.
 * `AIT_ROBOT_0_PROMPT`: The prompt for extra robot `#0`, for example, `I want you to act as a spoken English teacher and improver.`.
 * `AIT_ROBOT_0_ASR_LANGUAGE`: The language for extra robot `#0`, see `AIT_ASR_LANGUAGE`, default to `en`.

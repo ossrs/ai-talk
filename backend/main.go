@@ -1219,7 +1219,7 @@ func doConfig(ctx context.Context) error {
 	// Config all robots.
 	if os.Getenv("AIT_DEFAULT_ROBOT") == "true" {
 		robots = append(robots, &Robot{
-			uuid: uuid.NewString(), label: "Default", asrLanguage: os.Getenv("AIT_ASR_LANGUAGE"),
+			uuid: "default", label: "Default", asrLanguage: os.Getenv("AIT_ASR_LANGUAGE"),
 			prompt: os.Getenv("AIT_SYSTEM_PROMPT"), voice: "hello-english.aac",
 		})
 	}
@@ -1236,7 +1236,8 @@ func doConfig(ctx context.Context) error {
 			}
 
 			robots = append(robots, &Robot{
-				uuid: uuid.NewString(), voice: voice,
+				voice:  voice,
+				uuid:   os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ID", i)),
 				label:  os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i)),
 				prompt: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i)),
 				prefix: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i)),

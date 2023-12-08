@@ -1,25 +1,29 @@
-.App {
+.StaticButton, .DynamicButton, .RecordingButton {
+  font-size: 14px;
   text-align: center;
+  cursor: pointer;
+  background-color: buttonface;
+  color: buttontext;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 30%;
+  user-select:none;
 }
 
 .StaticButton {
   width: 150px;
   height: 150px;
-  border-radius: 20%;
-  user-select:none;
 }
 
 .DynamicButton, .RecordingButton {
-  width: 190px;
-  height: 190px;
-  border-radius: 30%;
-  user-select:none;
+  width: 150px;
+  height: 150px;
 }
 
 .RecordingButton {
   width: 200px;
   height: 200px;
-  border-radius: 40%;
   background-color: rgba(157, 238, 91, 0.7);
 }
 
@@ -57,12 +61,14 @@
 .App-header {
   background-color: #282c34;
   min-height: 40vh;
+  min-width: 100vw;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-size: calc(10px + 2vmin);
   color: white;
+  user-select:none;
 }
 
 .App-link {

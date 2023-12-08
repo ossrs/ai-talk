@@ -81,7 +81,8 @@ function App() {
         })}
         {!showVerboseLogs && infoLogs.map((log, index) => {
           const you = log.indexOf('You:') === 0;
-          const color = you ? 'darkgreen' : 'darkblue';
+          const bot = log.indexOf('Bot:') === 0;
+          const color = you ? 'darkgreen' : (bot ? 'darkblue' : '');
           const fontWeight = you ? 'bold' : 'normal';
           return (<li key={index} style={{color,fontWeight}}>{log}</li>);
         })}
@@ -397,6 +398,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
         setProcessing(false);
         setAttention(false);
         ref.current.mediaRecorder = null;
+        ref.current.isRecording = false;
       }
     };
 
@@ -436,14 +438,15 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     playerRef.current.play();
   }, [verbose, playerRef]);
 
-  return <div className="App">
-    <header onTouchStart={startRecording} onTouchEnd={stopRecording} className="App-header">
-      <button
-        onTouchStart={startRecording} onTouchEnd={stopRecording}
-        className={!attention ? 'StaticButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}
-        disabled={!started || processing}
-      >{recording ? '' : processing ? 'Processing' : (isMobile ? 'Press to talk' : 'Press the R key')}</button>
-    </header>
+  return <>
+    <button className="App-header"
+            onTouchStart={startRecording}
+            onTouchEnd={stopRecording}
+            disabled={!started || processing}>
+      <label className={!attention ? 'StaticButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}>
+        {recording ? '' : processing ? 'Processing' : (isMobile ? 'Press to talk' : 'Press the R key')}
+      </label>
+    </button>
     {showVerboseLogs && <p>
       <button onClick={(e) => {
         onClickWelcomeAudio();
@@ -451,7 +454,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
       <a href="https://github.com/winlinvip/ai-talk/discussions" target='_blank'>Help me!</a>
     </p>}
     {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk" alt=''/>}
-  </div>;
+  </>;
 }
 
 export default App;

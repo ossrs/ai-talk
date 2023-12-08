@@ -591,9 +591,13 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 			Content: stage.previousAssitant,
 		})
 
-		// TODO: FIMXE: Use AIT_CHAT_WINDOW
-		for len(stage.histories) > 10*2 {
-			stage.histories = stage.histories[1:]
+		if v, err := strconv.ParseInt(os.Getenv("AIT_CHAT_WINDOW"), 10, 64); err != nil {
+			return errors.Wrapf(err, "parse AIT_CHAT_WINDOW %v", os.Getenv("AIT_CHAT_WINDOW"))
+		} else {
+			window := int(v)
+			for len(stage.histories) > window*2 {
+				stage.histories = stage.histories[1:]
+			}
 		}
 	}
 
@@ -616,14 +620,14 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	model := os.Getenv("AIT_CHAT_MODEL")
 	var maxTokens int
 	if v, err := strconv.ParseInt(os.Getenv("AIT_MAX_TOKENS"), 10, 64); err != nil {
-		return errors.Wrapf(err, "parse AIT_MAX_TOKENS")
+		return errors.Wrapf(err, "parse AIT_MAX_TOKENS %v", os.Getenv("AIT_MAX_TOKENS"))
 	} else {
 		maxTokens = int(v)
 	}
 
 	var temperature float32
 	if v, err := strconv.ParseFloat(os.Getenv("AIT_TEMPERATURE"), 64); err != nil {
-		return errors.Wrapf(err, "parse AIT_TEMPERATURE")
+		return errors.Wrapf(err, "parse AIT_TEMPERATURE %v", os.Getenv("AIT_TEMPERATURE"))
 	} else {
 		temperature = float32(v)
 	}
@@ -1091,6 +1095,7 @@ func doConfig(ctx context.Context) error {
 	setEnvDefault("AIT_ASR_LANGUAGE", "en")
 	setEnvDefault("AIT_REPLY_LIMIT", "50")
 	setEnvDefault("AIT_DEVELOPMENT", "true")
+	setEnvDefault("AIT_CHAT_WINDOW", "5")
 
 	// Load env variables from file.
 	if _, err := os.Stat("../.env"); err == nil {
@@ -1102,14 +1107,14 @@ func doConfig(ctx context.Context) error {
 		return errors.New("OPENAI_API_KEY is required")
 	}
 
-	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, AIT_HTTP_LISTEN=%v, AIT_HTTPS_LISTEN=%v, AIT_PROXY_STATIC=%v, "+
-		"AIT_REPLY_PREFIX=%v, AIT_SYSTEM_PROMPT=%v, AIT_CHAT_MODEL=%v, AIT_MAX_TOKENS=%v, AIT_TEMPERATURE=%v, "+
-		"AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v",
+	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, AIT_HTTP_LISTEN=%v, AIT_HTTPS_LISTEN=%v, "+
+		"AIT_PROXY_STATIC=%v, AIT_REPLY_PREFIX=%v, AIT_SYSTEM_PROMPT=%v, AIT_CHAT_MODEL=%v, AIT_MAX_TOKENS=%v, "+
+		"AIT_TEMPERATURE=%v, AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v, AIT_CHAT_WINDOW=%v",
 		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("AIT_HTTP_LISTEN"),
 		os.Getenv("AIT_HTTPS_LISTEN"), os.Getenv("AIT_PROXY_STATIC"), os.Getenv("AIT_REPLY_PREFIX"),
-		os.Getenv("AIT_SYSTEM_PROMPT"), os.Getenv("AIT_CHAT_MODEL"),
-		os.Getenv("AIT_MAX_TOKENS"), os.Getenv("AIT_TEMPERATURE"), os.Getenv("AIT_KEEP_FILES"),
-		os.Getenv("AIT_ASR_LANGUAGE"), os.Getenv("AIT_REPLY_LIMIT"),
+		os.Getenv("AIT_SYSTEM_PROMPT"), os.Getenv("AIT_CHAT_MODEL"), os.Getenv("AIT_MAX_TOKENS"),
+		os.Getenv("AIT_TEMPERATURE"), os.Getenv("AIT_KEEP_FILES"), os.Getenv("AIT_ASR_LANGUAGE"),
+		os.Getenv("AIT_REPLY_LIMIT"), os.Getenv("AIT_CHAT_WINDOW"),
 	)
 
 	// Initialize OpenAI client config.

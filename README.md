@@ -106,7 +106,7 @@ Other optional environment variables:
 * `AIT_TEMPERATURE`: The temperature, default to `0.9`.
 * `AIT_KEEP_FILES`: Whether keep audio files, default to `false`.
 * `AIT_REPLY_LIMIT`: The AI reply limit words, default to `50`.
-* `AIT_CHAT_WINDOW`: The AI chat window to store historical messages, default to `10`.
+* `AIT_CHAT_WINDOW`: The AI chat window to store historical messages, default to `5`.
 
 ## HTTPS Certificate
 

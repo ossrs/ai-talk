@@ -107,4 +107,14 @@ Other optional environment variables:
 * `AIT_KEEP_FILES`: Whether keep audio files, default to `false`.
 * `AIT_REPLY_LIMIT`: The AI reply limit words, default to `50`.
 
+## HTTPS Certificate
+
+You can buy and download HTTPS certificate, then mount to docker by:
+
+```bash
+docker run -v /path/to/domain.crt:/g/server.crt -v /path/to/domain.key:/g/server.key
+```
+
+Please make sure the file `/path/to/domain.crt` and `/path/to/domain.key` exists.
+
 Winlin, 2023.12

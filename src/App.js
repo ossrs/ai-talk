@@ -1,44 +1,6 @@
 import React from 'react';
 import './App.css';
-import {RobotConfig} from "./utils";
-
-function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState(false);
-
-  function handleWindowSizeChange() {
-    setIsMobile(window.innerWidth <= 768);
-  }
-  React.useEffect(() => {
-    handleWindowSizeChange();
-    window.addEventListener('resize', handleWindowSizeChange);
-    return () => {
-      window.removeEventListener('resize', handleWindowSizeChange);
-    }
-  }, [setIsMobile]);
-
-  return isMobile;
-}
-
-function useIsOssrsNet() {
-  const [isOssrsNet, setIsOssrsNet] = React.useState(false);
-  React.useEffect(() => {
-    if (window.location.hostname.indexOf('ossrs.net') >= 0) {
-      setIsOssrsNet(true);
-    }
-  }, [setIsOssrsNet]);
-  return isOssrsNet;
-}
-
-function buildLog(msg) {
-  const date = new Date();
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  const seconds = date.getSeconds().toString().padStart(2, '0');
-
-  const log = `[${hours}:${minutes}:${seconds}]: ${msg}`;
-  console.log(log);
-  return log;
-}
+import {RobotConfig, useIsMobile, useIsOssrsNet, buildLog} from "./utils";
 
 function App() {
   // User selected robot.

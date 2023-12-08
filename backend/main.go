@@ -820,6 +820,29 @@ func handleRemoveAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.R
 	return nil
 }
 
+// Serve static files.
+func handleStaticFiles(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	filename := r.URL.Path[len("/api/ai-talk/examples/"):]
+	if !strings.Contains(filename, ".") {
+		filename = fmt.Sprintf("%v.aac", filename)
+	}
+
+	// If there is an optional stage id, we will use the logging context of stage.
+	if sid := r.URL.Query().Get("sid"); sid != "" {
+		if stage := talkServer.QueryStage(sid); stage != nil {
+			ctx = stage.loggingCtx
+		}
+	}
+
+	ext := strings.Trim(path.Ext(filename), ".")
+	contentType := fmt.Sprintf("audio/%v", ext)
+	logger.Tf(ctx, "Serve example file=%v, ext=%v, contentType=%v", filename, ext, contentType)
+
+	w.Header().Set("Content-Type", contentType)
+	http.ServeFile(w, r, path.Join(workDir, filename))
+	return nil
+}
+
 func doMain(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -885,24 +908,10 @@ func doMain(ctx context.Context) error {
 	//		/api/ai-talk/examples/example.aac
 	//		/api/ai-talk/examples/example.mp4
 	handler.HandleFunc("/api/ai-talk/examples/", func(w http.ResponseWriter, r *http.Request) {
-		filename := r.URL.Path[len("/api/ai-talk/examples/"):]
-		if !strings.Contains(filename, ".") {
-			filename = fmt.Sprintf("%v.aac", filename)
+		if err := handleStaticFiles(ctx, w, r); err != nil {
+			logger.Ef(ctx, "Handle static files failed, err %+v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-
-		// If there is an optional stage id, we will use the logging context of stage.
-		if sid := r.URL.Query().Get("sid"); sid != "" {
-			if stage := talkServer.QueryStage(sid); stage != nil {
-				ctx = stage.loggingCtx
-			}
-		}
-
-		ext := strings.Trim(path.Ext(filename), ".")
-		contentType := fmt.Sprintf("audio/%v", ext)
-		logger.Tf(ctx, "Serve example file=%v, ext=%v, contentType=%v", filename, ext, contentType)
-
-		w.Header().Set("Content-Type", contentType)
-		http.ServeFile(w, r, path.Join(workDir, filename))
 	})
 
 	// httpCreateProxy create a reverse proxy for target URL.

@@ -91,11 +91,6 @@ function App() {
     setVerboseLogs(ref.current.verboseLogs);
   }, [ref, setVerboseLogs]);
 
-  // Setup the website title.
-  React.useEffect(() => {
-    document.title = "AI Talk";
-  }, []);
-
   // The application is started now.
   React.useEffect(() => {
     // Only allow localhost or https to access microphone.
@@ -411,6 +406,7 @@ function App() {
           playerRef.current.play();
         }}>Welcome audio</button> &nbsp;
       </React.Fragment>}
+      <a href="https://github.com/winlinvip/ai-talk/discussions" target='_blank'>Help me!</a>
     </p>
     <ul className='LogPanel'>
       {showVerboseLogs && verboseLogs.map((log, index) => {

@@ -35,6 +35,7 @@ import (
 	"unicode/utf8"
 )
 
+var talkServer *TalkServer
 var ttsWorker *TTSWorker
 var previousAsrText string
 var previousUser, previousAssitant string
@@ -47,12 +48,28 @@ var workDir string
 type Stage struct {
 	// Stage UUID
 	sid string
+	// Last update of stage.
+	update time.Time
 }
 
 func NewStage() *Stage {
 	return &Stage{
+		// Create new UUID.
 		sid: uuid.NewString(),
+		// Update time.
+		update: time.Now(),
 	}
+}
+
+func (v *Stage) Close() error {
+	return nil
+}
+
+func (v *Stage) Expired() bool {
+	if os.Getenv("AIT_DEVELOPMENT") == "true" {
+		return time.Since(v.update) > 30*time.Second
+	}
+	return time.Since(v.update) > 300*time.Second
 }
 
 // The AnswerSegment is a segment of answer, which is a sentence.
@@ -89,6 +106,50 @@ func NewAnswerSegment(opts ...func(segment *AnswerSegment)) *AnswerSegment {
 		opt(v)
 	}
 	return v
+}
+
+// The TalkServer is the AI talk server, manage stages.
+type TalkServer struct {
+	// All stages created by user.
+	stages []*Stage
+	// The lock to protect fields.
+	lock sync.Mutex
+}
+
+func NewTalkServer() *TalkServer {
+	return &TalkServer{
+		stages: []*Stage{},
+	}
+}
+
+func (v *TalkServer) Close() error {
+	return nil
+}
+
+func (v *TalkServer) AddStage(stage *Stage) {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	v.stages = append(v.stages, stage)
+}
+
+func (v *TalkServer) RemoveStage(stage *Stage) {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	for i, s := range v.stages {
+		if s.sid == stage.sid {
+			v.stages = append(v.stages[:i], v.stages[i+1:]...)
+			return
+		}
+	}
+}
+
+func (v *TalkServer) CountStage() int {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	return len(v.stages)
 }
 
 // The TTSWorker is a worker to convert answers from text to audio.
@@ -263,6 +324,26 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
 func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	stage := NewStage()
 
+	talkServer.AddStage(stage)
+	logger.Tf(ctx, "Stage: Create new stage rid=%v, all=%v", stage.sid, talkServer.CountStage())
+
+	go func() {
+		defer stage.Close()
+
+		for ctx.Err() == nil {
+			select {
+			case <-ctx.Done():
+			case <-time.After(3 * time.Second):
+				if stage.Expired() {
+					logger.Tf(ctx, "Stage: Remove %v for expired, update=%v",
+						stage.sid, stage.update.Format(time.RFC3339))
+					talkServer.RemoveStage(stage)
+					return
+				}
+			}
+		}
+	}()
+
 	ohttp.WriteData(ctx, w, r, struct {
 		StageID string `json:"sid"`
 	}{
@@ -370,11 +451,20 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 	ctx = logger.WithContext(ctx)
 
+	// The stage uuid, user must create it before upload question audio.
+	sid := r.URL.Query().Get("sid")
+	if sid == "" {
+		return errors.Errorf("empty sid")
+	}
+
 	// The rid is the request id, which identify this request, generally a question.
 	rid := uuid.NewString()
+	inputFile := path.Join(workDir, fmt.Sprintf("%v-input.audio", rid))
+	outputFile := path.Join(workDir, fmt.Sprintf("%v-input.m4a", rid))
+	logger.Tf(ctx, "ASR: Got question rid=%v, sid=%v, input=%v, output=%v",
+		rid, sid, inputFile, outputFile)
 
 	// We save the input audio to *.audio file, it can be aac or opus codec.
-	inputFile := path.Join(workDir, fmt.Sprintf("%v-input.audio", rid))
 	if os.Getenv("AIT_KEEP_FILES") != "true" {
 		defer os.Remove(inputFile)
 	}
@@ -403,7 +493,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		return errors.Wrapf(err, "copy %v", inputFile)
 	}
 
-	outputFile := path.Join(workDir, fmt.Sprintf("%v-input.m4a", rid))
+	// Transcode input audio in opus or aac, to aac in m4a format.
 	if os.Getenv("AIT_KEEP_FILES") != "true" {
 		defer os.Remove(outputFile)
 	}
@@ -420,6 +510,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		logger.Tf(ctx, "Convert to ogg %v ok", outputFile)
 	}
 
+	// Do ASR, convert to text.
 	var config openai.ClientConfig
 	config = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
 	if os.Getenv("OPENAI_PROXY") != "" {
@@ -446,6 +537,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	previousAsrText = resp.Text
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
 
+	// Do chat, get the response in stream.
 	if previousUser != "" && previousAssitant != "" {
 		histories = append(histories, openai.ChatCompletionMessage{
 			Role:    openai.ChatMessageRoleUser,
@@ -626,6 +718,10 @@ func doMain(ctx context.Context) error {
 		return errors.Wrapf(err, "config")
 	}
 
+	// Create the talk server.
+	talkServer = NewTalkServer()
+	defer talkServer.Close()
+
 	// Cleanup TTS worker.
 	ttsWorker = NewTTSWorker()
 	defer ttsWorker.Close()
@@ -657,9 +753,9 @@ func doMain(ctx context.Context) error {
 		}
 	})
 
-	handler.HandleFunc("/api/ai-talk/question/", func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc("/api/ai-talk/query/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleQueryQuestionState(ctx, w, r); err != nil {
-			logger.Ef(ctx, "Handle question failed, err %+v", err)
+			logger.Ef(ctx, "Handle query failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
@@ -885,6 +981,7 @@ func doConfig(ctx context.Context) error {
 	setEnvDefault("AIT_KEEP_FILES", "false")
 	setEnvDefault("AIT_ASR_LANGUAGE", "en")
 	setEnvDefault("AIT_REPLY_LIMIT", "50")
+	setEnvDefault("AIT_DEVELOPMENT", "true")
 
 	// Load env variables from file.
 	if _, err := os.Stat("../.env"); err == nil {

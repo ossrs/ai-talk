@@ -67,6 +67,7 @@ function App() {
     audioChunks: [],
     verboseLogs: [],
     infoLogs: [],
+    stageUUID: null,
   });
 
   // Write a summary or info log, which is important but short message for user.
@@ -111,6 +112,7 @@ function App() {
           resolve(data.data.sid);
         }).catch((error) => reject(error));
       });
+      ref.current.stageUUID = stageUUID;
 
       // Play the welcome audio.
       await new Promise(resolve => {
@@ -164,7 +166,7 @@ function App() {
     } finally {
       setStarting(false);
     }
-  }, [verbose, info, setStarted, playerRef, setPlayerAvailable]);
+  }, [verbose, info, setStarted, playerRef, setPlayerAvailable, ref]);
 
   // User start a conversation, by recording input.
   const startRecording = React.useCallback(async () => {
@@ -222,7 +224,7 @@ function App() {
         const formData = new FormData();
         formData.append('file', audioBlob, 'input.audio');
 
-        fetch('/api/ai-talk/upload/', {
+        fetch(`/api/ai-talk/upload/?sid=${ref.current.stageUUID}`, {
           method: 'POST',
           body: formData,
         }).then(response => {
@@ -240,7 +242,7 @@ function App() {
         let audioSegmentUUID = null;
         while (!audioSegmentUUID) {
           const resp = await new Promise((resolve, reject) => {
-            fetch(`/api/ai-talk/question/?rid=${requestUUID}`, {
+            fetch(`/api/ai-talk/query/?sid=${ref.current.stageUUID}&rid=${requestUUID}`, {
               method: 'POST',
             }).then(response => {
               return response.json();
@@ -274,7 +276,7 @@ function App() {
 
         // Play the AI generated audio.
         await new Promise(resolve => {
-          const url = `/api/ai-talk/tts/?rid=${requestUUID}&asid=${audioSegmentUUID}`;
+          const url = `/api/ai-talk/tts/?sid=${ref.current.stageUUID}&rid=${requestUUID}&asid=${audioSegmentUUID}`;
           verbose(`TTS: Playing ${url}`);
 
           const listener = () => {
@@ -295,7 +297,7 @@ function App() {
 
         // Remove the AI generated audio.
         await new Promise((resolve, reject) => {
-          fetch(`/api/ai-talk/remove/?rid=${requestUUID}&asid=${audioSegmentUUID}`, {
+          fetch(`/api/ai-talk/remove/?sid=${ref.current.stageUUID}&rid=${requestUUID}&asid=${audioSegmentUUID}`, {
             method: 'POST',
           }).then(response => {
             return response.json();

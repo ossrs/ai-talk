@@ -209,11 +209,14 @@ function App() {
 
     // See https://www.sitelint.com/lab/media-recorder-supported-mime-type/
     ref.current.mediaRecorder = new MediaRecorder(stream);
+    
+    // See https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder#events
     ref.current.mediaRecorder.addEventListener("start", () => {
       verbose(`Event: Recording start to record`);
       setMicWorking(true);
       setAttention(true);
     });
+
     ref.current.mediaRecorder.addEventListener("dataavailable", ({ data }) => {
       ref.current.audioChunks.push(data);
       verbose(`Event: Device dataavailable event ${data.size} bytes`);

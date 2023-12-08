@@ -149,6 +149,7 @@ The changelog:
   * Support multiple assistants and select before start. v1.0.11
   * Setup model and robots by environment variables. [v1.0.12](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.12)
   * Fix Android browser select button label issue. v1.0.13
-  * Add micWorking and attention state to avoid data loss. v1.0.13
+  * Add micWorking and attention state to avoid data loss. v1.0.14
+  * Refine the UI for mobile browser. v1.0.15
 
 Winlin, 2023.12

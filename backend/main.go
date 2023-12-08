@@ -36,9 +36,6 @@ import (
 )
 
 var talkServer *TalkServer
-var previousAsrText string
-var previousUser, previousAssitant string
-var histories []openai.ChatCompletionMessage
 var aiConfig openai.ClientConfig
 var workDir string
 
@@ -53,6 +50,12 @@ type Stage struct {
 	ttsWorker *TTSWorker
 	// The logging context, to write all logs in one context for a sage.
 	loggingCtx context.Context
+	// Previous ASR text, to use as prompt for next ASR.
+	previousAsrText string
+	// Previous chat text, to use as prompt for next chat.
+	previousUser, previousAssitant string
+	// The chat history, to use as prompt for next chat.
+	histories []openai.ChatCompletionMessage
 }
 
 func NewStage(opts ...func(*Stage)) *Stage {
@@ -456,7 +459,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 			}
 
 			if finished || newSentence {
-				previousAssitant += sentence + " "
+				stage.previousAssitant += sentence + " "
 
 				if firstSentense {
 					firstSentense = false
@@ -563,37 +566,39 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 			FilePath: outputFile,
 			Format:   openai.AudioResponseFormatJSON,
 			Language: os.Getenv("AIT_ASR_LANGUAGE"),
-			Prompt:   previousAsrText,
+			Prompt:   stage.previousAsrText,
 		},
 	)
 	if err != nil {
 		return errors.Wrapf(err, "transcription")
 	}
 	logger.Tf(ctx, "ASR ok, lang=%v, prompt=<%v>, resp is <%v>",
-		os.Getenv("AIT_ASR_LANGUAGE"), previousAsrText, resp.Text)
+		os.Getenv("AIT_ASR_LANGUAGE"), stage.previousAsrText, resp.Text)
 	asrText := resp.Text
-	previousAsrText = resp.Text
+	stage.previousAsrText = resp.Text
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
 
 	// Keep alive the stage.
 	stage.KeepAlive()
 
 	// Do chat, get the response in stream.
-	if previousUser != "" && previousAssitant != "" {
-		histories = append(histories, openai.ChatCompletionMessage{
+	if stage.previousUser != "" && stage.previousAssitant != "" {
+		stage.histories = append(stage.histories, openai.ChatCompletionMessage{
 			Role:    openai.ChatMessageRoleUser,
-			Content: previousUser,
+			Content: stage.previousUser,
 		}, openai.ChatCompletionMessage{
 			Role:    openai.ChatMessageRoleAssistant,
-			Content: previousAssitant,
+			Content: stage.previousAssitant,
 		})
-		for len(histories) > 10 {
-			histories = histories[1:]
+
+		// TODO: FIMXE: Use AIT_CHAT_WINDOW
+		for len(stage.histories) > 10*2 {
+			stage.histories = stage.histories[1:]
 		}
 	}
 
-	previousUser = previousAsrText
-	previousAssitant = ""
+	stage.previousUser = stage.previousAsrText
+	stage.previousAssitant = ""
 
 	system := os.Getenv("AIT_SYSTEM_PROMPT")
 	system += fmt.Sprintf("Keep your reply neat, limiting the reply to %v words.", os.Getenv("AIT_REPLY_LIMIT"))
@@ -602,10 +607,10 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		{Role: openai.ChatMessageRoleSystem, Content: system},
 	}
 
-	messages = append(messages, histories...)
+	messages = append(messages, stage.histories...)
 	messages = append(messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
-		Content: previousAsrText,
+		Content: stage.previousAsrText,
 	})
 
 	model := os.Getenv("AIT_CHAT_MODEL")

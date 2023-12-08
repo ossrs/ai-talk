@@ -223,11 +223,11 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
   const isMobile = useIsMobile();
   const isOssrsNet = useIsOssrsNet();
 
-  // Whether user is recording the input audio.
-  const [recording, setRecording] = React.useState(false);
+  // Whether user is having a conversation with AI, from user speak, util AI speak.
+  const [working, setWorking] = React.useState(false);
   // Whether microphone is really working, when state change to active.
   const [micWorking, setMicWorking] = React.useState(false);
-  // Whether should be attention to the user, such as processing the user input.
+  // Whether be attention to the user, such as processing the user input.
   const [attention, setAttention] = React.useState(false);
   // Whether AI is processing the user input and generating the response.
   const [processing, setProcessing] = React.useState(false);
@@ -248,7 +248,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     if (ref.current.isRecording) return;
     ref.current.isRecording = true;
 
-    setRecording(true);
+    setWorking(true);
     verbose("=============");
     info("=============");
 
@@ -277,7 +277,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
 
     ref.current.mediaRecorder.start();
     verbose(`Event: Recording started`);
-  }, [info, verbose, started, ref, setMicWorking, setAttention]);
+  }, [info, verbose, started, ref, setMicWorking, setAttention, setWorking]);
 
   // User click stop button, we delay some time to allow cancel the stopping event.
   const stopRecording = React.useCallback(async () => {
@@ -297,7 +297,6 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
         ref.current.mediaRecorder.stop();
       });
 
-      setRecording(false);
       setMicWorking(false);
       setProcessing(true);
       verbose(`Event: Recoder stopped, chunks=${ref.current.audioChunks.length}`);
@@ -399,6 +398,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
       } finally {
         setProcessing(false);
         setAttention(false);
+        setWorking(false);
         ref.current.mediaRecorder = null;
         ref.current.isRecording = false;
       }
@@ -408,7 +408,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
     }, 800);
-  }, [info, verbose, playerRef, stageUUID, robot, started, ref, setProcessing, setRecording, setAttention]);
+  }, [info, verbose, playerRef, stageUUID, robot, started, ref, setProcessing, setWorking, setAttention]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -445,8 +445,8 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
             disabled={!started || processing}>
-      <label className={!attention ? 'StaticButton' : micWorking ? 'RecordingButton' : processing ? 'ProcessingButton' : 'DynamicButton'}>
-        {recording ? '' : processing ? 'Processing' : (isMobile ? 'Press to talk' : 'Press the R key')}
+      <label className={!working ? 'StaticButton' : processing ? 'ProcessingButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}>
+        {processing ? 'Processing' : working ? '' : (isMobile ? 'Press to talk' : 'Press the R key')}
       </label>
     </button>
     {showVerboseLogs && <p>

@@ -7,7 +7,7 @@ AI-Talk allows you to talk with OpenAI GPT.
 
 Please setup the envirionments:
 ```
-AI_SYSTEM_PROMPT='You are an assistant. Keep your reply neat, limiting the reply to 50 words.'
+AI_SYSTEM_PROMPT='You are a helpful assistant.'
 ```
 
 https://github.com/winlinvip/ai-talk/assets/2777660/2d6710f0-9f71-4508-8ba7-7898da4673e1
@@ -18,7 +18,7 @@ https://github.com/winlinvip/ai-talk/assets/2777660/2d6710f0-9f71-4508-8ba7-7898
 
 Please setup the envirionments:
 ```
-AI_SYSTEM_PROMPT='I want you to act as a spoken English teacher and improver. I will speak to you in English and you will reply to me in English to practice my spoken English. I want you to keep your reply neat, limiting the reply to 50 words. I want you to strictly correct my grammar mistakes, typos, and factual errors. I want you to ask me a question in your reply. Now let us start practicing, you could ask me a question first. Remember, I want you to strictly correct my grammar mistakes, typos, and factual errors.'
+AI_SYSTEM_PROMPT='I want you to act as a spoken English teacher and improver. I will speak to you in English and you will reply to me in English to practice my spoken English. I want you to  I want you to strictly correct my grammar mistakes, typos, and factual errors. I want you to ask me a question in your reply. Now let us start practicing, you could ask me a question first. Remember, I want you to strictly correct my grammar mistakes, typos, and factual errors.'
 ```
     
 https://github.com/winlinvip/ai-talk/assets/2777660/07a5dfed-8120-4ec1-a18b-abb2fd6de349
@@ -56,7 +56,7 @@ To run in docker:
 ```bash
 docker run --rm -it -p 80:3000 -p 443:3443 \
     -e OPENAI_API_KEY=sk-xxx -e OPENAI_PROXY=api.openai.com \
-    -e AI_SYSTEM_PROMPT="You are an assistant. Keep your reply neat, limiting the reply to 50 words." \
+    -e AI_SYSTEM_PROMPT="You are a helpful assistant." \
     -e AI_MODEL="gpt-4-1106-preview" \
     ossrs/ai-talk
 ```
@@ -81,6 +81,7 @@ Optional environment variables:
 
 * `OPENAI_PROXY`: The OpenAI API proxy, default to `api.openai.com`, which directly access OpenAI API without proxy.
 * `AI_SYSTEM_PROMPT`: The system prompt, default to `You are a helpful assistant.`.
+  * To make sure AI response limit words to avoid long audio, we always append `Keep your reply neat, limiting the reply to 50 words.` to system prompt.
 * `AI_MODEL`: The AI model, default to `gpt-4-1106-preview` which is the latest model.
 * `AI_ASR_LANGUAGE`: The language for Whisper ASR, default to `en`, see [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes), bellow are some examples:
   * `en`: English

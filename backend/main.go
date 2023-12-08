@@ -428,7 +428,10 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	previousAssitant = ""
 
 	system := os.Getenv("AI_SYSTEM_PROMPT")
-	logger.Tf(ctx, "AI system prompt(AI_SYSTEM_PROMPT): %v", system)
+	if !strings.Contains(system, "limiting the reply to 50 words") {
+		system += "Keep your reply neat, limiting the reply to 50 words."
+	}
+	logger.Tf(ctx, "AI system prompt: %v", system)
 	messages := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: system},
 	}
@@ -623,7 +626,7 @@ func doMain(ctx context.Context) error {
 	setEnvDefault("PROXY_STATIC", "true")
 	setEnvDefault("AI_NO_PADDING", "true")
 	setEnvDefault("AI_PADDING_TEXT", "My answer is ")
-	setEnvDefault("AI_SYSTEM_PROMPT", "You are an assistant. Keep your reply neat, limiting the reply to 50 words.")
+	setEnvDefault("AI_SYSTEM_PROMPT", "You are a helpful assistant.")
 	setEnvDefault("AI_MODEL", openai.GPT4TurboPreview)
 	setEnvDefault("AI_MAX_TOKENS", "1024")
 	setEnvDefault("AI_TEMPERATURE", "0.9")

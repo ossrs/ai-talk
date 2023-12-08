@@ -268,13 +268,16 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
 
   // The refs, about the logs and audio chunks model.
   const ref = React.useRef({
+    stopHandler: null,
     mediaRecorder: null,
     audioChunks: [],
   });
 
   // User start a conversation, by recording input.
   const startRecording = React.useCallback(async () => {
+    if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     if (ref.current.mediaRecorder) return;
+    if (!started) return;
 
     setRecording(true);
     verbose("=============");
@@ -305,10 +308,10 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
 
     ref.current.mediaRecorder.start();
     verbose(`Event: Recording started`);
-  }, [info, verbose, ref, setMicWorking, setAttention]);
+  }, [info, verbose, started, ref, setMicWorking, setAttention]);
 
   // User stop a conversation, by uploading input and playing response.
-  const stopRecording = React.useCallback(async () => {
+  const stopRecordingImpl = React.useCallback(async () => {
     if (!ref.current.mediaRecorder) return;
 
     await new Promise(resolve => {
@@ -430,6 +433,14 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     }
   }, [info, verbose, playerRef, setPlayerAvailable, stageUUID, robot, ref, setProcessing, setRecording, setAttention]);
 
+  // Use delay stop.
+  const stopRecording = React.useCallback(async () => {
+    if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
+    ref.current.stopHandler = setTimeout(() => {
+      stopRecordingImpl();
+    }, 800);
+  }, [ref, stopRecordingImpl]);
+
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
     if (!started) return;
@@ -442,9 +453,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     const handleKeyUp = (e) => {
       if (processing) return;
       if (e.key !== 'r' && e.key !== '\\') return;
-      setTimeout(() => {
-        stopRecording();
-      }, 800);
+      stopRecording();
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -463,16 +472,9 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
   }, [verbose, playerRef, setPlayerAvailable, playerRef]);
 
   return <div className="App">
-    <header className="App-header">
+    <header onTouchStart={startRecording} onTouchEnd={stopRecording} className="App-header">
       <button
-        onTouchStart={(e) => {
-          startRecording();
-        }}
-        onTouchEnd={(e) => {
-          setTimeout(() => {
-            stopRecording();
-          }, 800);
-        }}
+        onTouchStart={startRecording} onTouchEnd={stopRecording}
         className={!attention ? 'StaticButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}
         disabled={!started || processing}
       >{recording ? '' : processing ? 'Processing' : (isMobile ? 'Press to talk' : 'Press the R key')}</button>

@@ -382,7 +382,8 @@ function App() {
     <p><audio ref={playerRef} controls={true} hidden={!playerAvailable} /></p>
     <p>
       {robots?.length ? <React.Fragment>
-        Assistant: <select disabled={starting || started} onChange={(e) => {
+        {(starting || started) ? '' : 'Assistant'} &nbsp;
+        <select disabled={starting || started} onChange={(e) => {
           const robot = robots.find(robot => robot.uuid === e.target.value);
           ref.current.robotUUID = robot.uuid;
           info(`Change to robot ${robot.label}`);
@@ -397,11 +398,11 @@ function App() {
         <button onClick={(e) => {
           verbose(`Replay last audio`);
           playerRef.current.play();
-        }}>Replay audio</button> &nbsp;
+        }}>Replay</button> &nbsp;
       </React.Fragment>}
       <button onClick={(e) => {
         setShowVerboseLogs(!showVerboseLogs);
-      }}>{!showVerboseLogs ? 'Debugging' : 'Quit debugging'}</button> &nbsp;
+      }}>{!showVerboseLogs ? 'Debug' : 'Quit debugging'}</button> &nbsp;
       {showVerboseLogs && <React.Fragment>
         <button onClick={(e) => {
           verbose(`Play example aac audio`);

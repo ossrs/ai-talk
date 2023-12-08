@@ -546,7 +546,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 					segment.rid = rid
 					segment.text = sentence
 					segment.ttsFile = path.Join(workDir,
-						fmt.Sprintf("%v-sentence-%v-tts.aac", rid, segment.asid),
+						fmt.Sprintf("assistant-%v-sentence-%v-tts.aac", rid, segment.asid),
 					)
 				}))
 				sentence = ""
@@ -585,8 +585,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 	// The rid is the request id, which identify this request, generally a question.
 	rid := uuid.NewString()
-	inputFile := path.Join(workDir, fmt.Sprintf("%v-input.audio", rid))
-	outputFile := path.Join(workDir, fmt.Sprintf("%v-input.m4a", rid))
+	inputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.audio", rid))
+	outputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.m4a", rid))
 	logger.Tf(ctx, "Stage: Got question sid=%v, robot=%v(%v), rid=%v, input=%v, output=%v",
 		sid, robot.uuid, robot.label, rid, inputFile, outputFile)
 

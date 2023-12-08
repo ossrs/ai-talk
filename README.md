@@ -141,6 +141,10 @@ The changelog:
 
 * v1.0:
   * Support mobile and PC browser. v1.0.0
+  * Request microphone permission when starting. v1.0.2
+  * Support single assistant to talk with. v1.0.3
+  * Dispose recorder and stream when record done. v1.0.4
+  * Setup the website title to AI Talk whatever. v1.0.6
   * Limit the response words to 50 words by default. v1.0.10
   * Support multiple assistants and select before start. v1.0.11
   * Setup model and robots by environment variables. [v1.0.12](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.12)

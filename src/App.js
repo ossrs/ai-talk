@@ -349,13 +349,19 @@ function App() {
     <p><audio ref={playerRef} controls={true} hidden={false} /></p>
     <p>
       <button onClick={(e) => {
-        setShowVerboseLogs(!showVerboseLogs);
-      }}>{!showVerboseLogs ? 'Detail logs' : 'Less logs'}</button> &nbsp;
-      <button onClick={(e) => {
-        verbose(`Play example aac audio`);
-        playerRef.current.src = "/api/ai-talk/examples/hello.aac";
+        verbose(`Replay last audio`);
         playerRef.current.play();
-      }}>Welcome audio</button> &nbsp;
+      }}>Replay audio</button> &nbsp;
+      <button onClick={(e) => {
+        setShowVerboseLogs(!showVerboseLogs);
+      }}>{!showVerboseLogs ? 'Debugging' : 'Quit debugging'}</button> &nbsp;
+      {showVerboseLogs && <React.Fragment>
+        <button onClick={(e) => {
+          verbose(`Play example aac audio`);
+          playerRef.current.src = "/api/ai-talk/examples/hello.aac";
+          playerRef.current.play();
+        }}>Welcome audio</button> &nbsp;
+      </React.Fragment>}
     </p>
     <ul className='LogPanel'>
       {showVerboseLogs && verboseLogs.map((log, index) => {

@@ -35,12 +35,25 @@ import (
 	"unicode/utf8"
 )
 
-var ttsWorker TTSWorker
+var ttsWorker *TTSWorker
 var previousAsrText string
 var previousUser, previousAssitant string
 var histories []openai.ChatCompletionMessage
 var aiConfig openai.ClientConfig
 var workDir string
+
+// The Stage is a stage of conversation, when user click start with a scenario,
+// we will create a stage object.
+type Stage struct {
+	// Stage UUID
+	sid string
+}
+
+func NewStage() *Stage {
+	return &Stage{
+		sid: uuid.NewString(),
+	}
+}
 
 // The AnswerSegment is a segment of answer, which is a sentence.
 type AnswerSegment struct {
@@ -62,11 +75,33 @@ type AnswerSegment struct {
 	removeSignal chan bool
 }
 
+func NewAnswerSegment(opts ...func(segment *AnswerSegment)) *AnswerSegment {
+	v := &AnswerSegment{
+		// Request UUID.
+		rid: uuid.NewString(),
+		// Audio Segment UUID.
+		asid: uuid.NewString(),
+		// Signal to remove the TTS file.
+		removeSignal: make(chan bool, 1),
+	}
+
+	for _, opt := range opts {
+		opt(v)
+	}
+	return v
+}
+
 // The TTSWorker is a worker to convert answers from text to audio.
 type TTSWorker struct {
 	segments []*AnswerSegment
 	lock     sync.Mutex
 	wg       sync.WaitGroup
+}
+
+func NewTTSWorker() *TTSWorker {
+	return &TTSWorker{
+		segments: []*AnswerSegment{},
+	}
 }
 
 func (v *TTSWorker) Close() error {
@@ -226,10 +261,12 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, segment *AnswerSegment) {
 
 // When user start a scenario or stage, response a stage object, which identified by sid or stage id.
 func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	stage := NewStage()
+
 	ohttp.WriteData(ctx, w, r, struct {
 		StageID string `json:"sid"`
 	}{
-		StageID: uuid.NewString(),
+		StageID: stage.sid,
 	})
 	return nil
 }
@@ -317,16 +354,14 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 					}
 				}
 
-				s := &AnswerSegment{
-					rid:          rid,
-					asid:         uuid.NewString(),
-					text:         sentence,
-					removeSignal: make(chan bool, 1),
-				}
-				s.ttsFile = path.Join(workDir, fmt.Sprintf("%v-sentence-%v-tts.aac", rid, s.asid))
+				ttsWorker.SubmitSegment(ctx, NewAnswerSegment(func(segment *AnswerSegment) {
+					segment.rid = rid
+					segment.text = sentence
+					segment.ttsFile = path.Join(workDir,
+						fmt.Sprintf("%v-sentence-%v-tts.aac", rid, segment.asid),
+					)
+				}))
 				sentence = ""
-
-				ttsWorker.SubmitSegment(ctx, s)
 			}
 		}
 
@@ -471,11 +506,10 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 
 	// Insert a dummy sentence to identify the request is alive.
-	ttsWorker.SubmitSegment(ctx, &AnswerSegment{
-		rid:   rid,
-		asid:  uuid.NewString(),
-		dummy: true,
-	})
+	ttsWorker.SubmitSegment(ctx, NewAnswerSegment(func(segment *AnswerSegment) {
+		segment.rid = rid
+		segment.dummy = true
+	}))
 
 	// Never wait for any response.
 	go func() {
@@ -593,6 +627,7 @@ func doMain(ctx context.Context) error {
 	}
 
 	// Cleanup TTS worker.
+	ttsWorker = NewTTSWorker()
 	defer ttsWorker.Close()
 
 	// Signal handler.
@@ -604,17 +639,6 @@ func doMain(ctx context.Context) error {
 		logger.Tf(ctx, "Got signal %v", sig)
 		cancel()
 	}()
-
-	// Load env variables from file.
-	if _, err := os.Stat("../.env"); err == nil {
-		if err := godotenv.Load("../.env"); err != nil {
-			return errors.Wrapf(err, "load env")
-		}
-	} else {
-		if os.Getenv("OPENAI_API_KEY") == "" {
-			return errors.Wrapf(err, "not found .env")
-		}
-	}
 
 	// HTTP API handlers.
 	handler := http.NewServeMux()
@@ -841,13 +865,13 @@ func doMain(ctx context.Context) error {
 }
 
 func doConfig(ctx context.Context) error {
-
 	// setEnvDefault set env key=value if not set.
 	setEnvDefault := func(key, value string) {
 		if os.Getenv(key) == "" {
 			os.Setenv(key, value)
 		}
 	}
+
 	setEnvDefault("OPENAI_API_KEY", "")
 	setEnvDefault("OPENAI_PROXY", "api.openai.com")
 	setEnvDefault("AIT_HTTP_LISTEN", "3001")
@@ -861,6 +885,17 @@ func doConfig(ctx context.Context) error {
 	setEnvDefault("AIT_KEEP_FILES", "false")
 	setEnvDefault("AIT_ASR_LANGUAGE", "en")
 	setEnvDefault("AIT_REPLY_LIMIT", "50")
+
+	// Load env variables from file.
+	if _, err := os.Stat("../.env"); err == nil {
+		if err := godotenv.Overload("../.env"); err != nil {
+			return errors.Wrapf(err, "load env")
+		}
+	}
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		return errors.New("OPENAI_API_KEY is required")
+	}
+
 	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, AIT_HTTP_LISTEN=%v, AIT_HTTPS_LISTEN=%v, AIT_PROXY_STATIC=%v, "+
 		"AIT_REPLY_PREFIX=%v, AIT_SYSTEM_PROMPT=%v, AIT_CHAT_MODEL=%v, AIT_MAX_TOKENS=%v, AIT_TEMPERATURE=%v, "+
 		"AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v",

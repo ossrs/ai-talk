@@ -428,9 +428,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	previousAssitant = ""
 
 	system := os.Getenv("AI_SYSTEM_PROMPT")
-	if !strings.Contains(system, "limiting the reply to 50 words") {
-		system += "Keep your reply neat, limiting the reply to 50 words."
-	}
+	system += fmt.Sprintf("Keep your reply neat, limiting the reply to %v words.", os.Getenv("AI_REPLY_LIMIT"))
 	logger.Tf(ctx, "AI system prompt: %v", system)
 	messages := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: system},
@@ -590,6 +588,10 @@ func doMain(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	if err := doConfig(ctx); err != nil {
+		return errors.Wrapf(err, "config")
+	}
+
 	// Cleanup TTS worker.
 	defer ttsWorker.Close()
 
@@ -613,52 +615,6 @@ func doMain(ctx context.Context) error {
 			return errors.Wrapf(err, "not found .env")
 		}
 	}
-
-	// setEnvDefault set env key=value if not set.
-	setEnvDefault := func(key, value string) {
-		if os.Getenv(key) == "" {
-			os.Setenv(key, value)
-		}
-	}
-	setEnvDefault("OPENAI_PROXY", "api.openai.com")
-	setEnvDefault("HTTP_LISTEN", "3001")
-	setEnvDefault("HTTPS_LISTEN", "3443")
-	setEnvDefault("PROXY_STATIC", "true")
-	setEnvDefault("AI_NO_PADDING", "true")
-	setEnvDefault("AI_PADDING_TEXT", "My answer is ")
-	setEnvDefault("AI_SYSTEM_PROMPT", "You are a helpful assistant.")
-	setEnvDefault("AI_MODEL", openai.GPT4TurboPreview)
-	setEnvDefault("AI_MAX_TOKENS", "1024")
-	setEnvDefault("AI_TEMPERATURE", "0.9")
-	setEnvDefault("KEEP_AUDIO_FILES", "false")
-	setEnvDefault("AI_ASR_LANGUAGE", "en")
-	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, HTTP_LISTEN=%v, HTTPS_LISTEN=%v, PROXY_STATIC=%v, "+
-		"AI_NO_PADDING=%v, AI_PADDING_TEXT=%v, AI_SYSTEM_PROMPT=%v, AI_MODEL=%v, AI_MAX_TOKENS=%v, AI_TEMPERATURE=%v, "+
-		"KEEP_AUDIO_FILES=%v, AI_ASR_LANGUAGE=%v",
-		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("HTTP_LISTEN"),
-		os.Getenv("HTTPS_LISTEN"), os.Getenv("PROXY_STATIC"), os.Getenv("AI_NO_PADDING"),
-		os.Getenv("AI_PADDING_TEXT"), os.Getenv("AI_SYSTEM_PROMPT"), os.Getenv("AI_MODEL"),
-		os.Getenv("AI_MAX_TOKENS"), os.Getenv("AI_TEMPERATURE"), os.Getenv("KEEP_AUDIO_FILES"),
-		os.Getenv("AI_ASR_LANGUAGE"),
-	)
-
-	// Initialize OpenAI client config.
-	aiConfig = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
-	if proxy := os.Getenv("OPENAI_PROXY"); proxy != "" {
-		if strings.Contains(proxy, "://") {
-			aiConfig.BaseURL = proxy
-		} else if strings.Contains(proxy, "openai.com") {
-			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
-		} else {
-			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
-		}
-
-		if !strings.HasSuffix(aiConfig.BaseURL, "/v1") {
-			aiConfig.BaseURL = fmt.Sprintf("%v/v1", aiConfig.BaseURL)
-		}
-	}
-	logger.Tf(ctx, "OpenAI key(OPENAI_API_KEY): %vB, proxy(OPENAI_PROXY): %v, base url: %v",
-		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), aiConfig.BaseURL)
 
 	// HTTP API handlers.
 	handler := http.NewServeMux()
@@ -881,6 +837,58 @@ func doMain(ctx context.Context) error {
 		return errors.Wrapf(err, "listen and serve")
 	}
 	logger.Tf(ctx, "HTTP Server closed")
+	return nil
+}
+
+func doConfig(ctx context.Context) error {
+
+	// setEnvDefault set env key=value if not set.
+	setEnvDefault := func(key, value string) {
+		if os.Getenv(key) == "" {
+			os.Setenv(key, value)
+		}
+	}
+	setEnvDefault("OPENAI_PROXY", "api.openai.com")
+	setEnvDefault("HTTP_LISTEN", "3001")
+	setEnvDefault("HTTPS_LISTEN", "3443")
+	setEnvDefault("PROXY_STATIC", "true")
+	setEnvDefault("AI_NO_PADDING", "true")
+	setEnvDefault("AI_PADDING_TEXT", "My answer is ")
+	setEnvDefault("AI_SYSTEM_PROMPT", "You are a helpful assistant.")
+	setEnvDefault("AI_MODEL", openai.GPT4TurboPreview)
+	setEnvDefault("AI_MAX_TOKENS", "1024")
+	setEnvDefault("AI_TEMPERATURE", "0.9")
+	setEnvDefault("KEEP_AUDIO_FILES", "false")
+	setEnvDefault("AI_ASR_LANGUAGE", "en")
+	setEnvDefault("AI_REPLY_LIMIT", "50")
+	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, HTTP_LISTEN=%v, HTTPS_LISTEN=%v, PROXY_STATIC=%v, "+
+		"AI_NO_PADDING=%v, AI_PADDING_TEXT=%v, AI_SYSTEM_PROMPT=%v, AI_MODEL=%v, AI_MAX_TOKENS=%v, AI_TEMPERATURE=%v, "+
+		"KEEP_AUDIO_FILES=%v, AI_ASR_LANGUAGE=%v, AI_REPLY_LIMIT=%v",
+		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("HTTP_LISTEN"),
+		os.Getenv("HTTPS_LISTEN"), os.Getenv("PROXY_STATIC"), os.Getenv("AI_NO_PADDING"),
+		os.Getenv("AI_PADDING_TEXT"), os.Getenv("AI_SYSTEM_PROMPT"), os.Getenv("AI_MODEL"),
+		os.Getenv("AI_MAX_TOKENS"), os.Getenv("AI_TEMPERATURE"), os.Getenv("KEEP_AUDIO_FILES"),
+		os.Getenv("AI_ASR_LANGUAGE"), os.Getenv("AI_REPLY_LIMIT"),
+	)
+
+	// Initialize OpenAI client config.
+	aiConfig = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
+	if proxy := os.Getenv("OPENAI_PROXY"); proxy != "" {
+		if strings.Contains(proxy, "://") {
+			aiConfig.BaseURL = proxy
+		} else if strings.Contains(proxy, "openai.com") {
+			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
+		} else {
+			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
+		}
+
+		if !strings.HasSuffix(aiConfig.BaseURL, "/v1") {
+			aiConfig.BaseURL = fmt.Sprintf("%v/v1", aiConfig.BaseURL)
+		}
+	}
+	logger.Tf(ctx, "OpenAI key(OPENAI_API_KEY): %vB, proxy(OPENAI_PROXY): %v, base url: %v",
+		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), aiConfig.BaseURL)
+
 	return nil
 }
 

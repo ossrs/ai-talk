@@ -81,7 +81,8 @@ Optional environment variables:
 
 * `OPENAI_PROXY`: The OpenAI API proxy, default to `api.openai.com`, which directly access OpenAI API without proxy.
 * `AI_SYSTEM_PROMPT`: The system prompt, default to `You are a helpful assistant.`.
-  * To make sure AI response limit words to avoid long audio, we always append `Keep your reply neat, limiting the reply to 50 words.` to system prompt.
+  * To make sure AI response limit words to avoid long audio, we always append `Keep your reply neat, limiting the reply to ${AI_REPLY_LIMIT} words.` to system prompt.
+  * You can set `AI_REPLY_LIMIT` to limit the words of AI response, default to `50`.
 * `AI_MODEL`: The AI model, default to `gpt-4-1106-preview` which is the latest model.
 * `AI_ASR_LANGUAGE`: The language for Whisper ASR, default to `en`, see [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes), bellow are some examples:
   * `en`: English
@@ -105,5 +106,6 @@ Other optional environment variables:
 * `AI_MAX_TOKENS`: The max tokens, default to `1024`.
 * `AI_TEMPERATURE`: The temperature, default to `0.9`.
 * `KEEP_AUDIO_FILES`: Whether keep audio files, default to `false`.
+* `AI_REPLY_LIMIT`: The AI reply limit words, default to `50`.
 
 Winlin, 2023.12

@@ -3,44 +3,16 @@ import './App.css';
 import {RobotConfig, useIsMobile, useIsOssrsNet, buildLog} from "./utils";
 
 function App() {
-  // User selected robot.
-  const [robot, setRobot] = React.useState(null);
-  const [stageUUID, setStageUUID] = React.useState(null);
-  // Whether robot is ready, user're allowd to talk with AI.
-  const [robotReady, setRobotReady] = React.useState(false);
-
   // The player ref, to access the audio player.
   const playerRef = React.useRef(null);
   // The log and debug panel.
   const [info, verbose, showVerboseLogs, logPanel] = useDebugPanel(playerRef);
-
-  // User start a stage.
-  const onStartStage = React.useCallback(async (uuid, robot) => {
-    verbose("Start the app");
-
-    setStageUUID(uuid);
-    setRobot(robot);
-
-    // Play the welcome audio.
-    await new Promise(resolve => {
-      verbose(`Start: Play hello welcome audio`);
-
-      playerRef.current.src = `/api/ai-talk/examples/${robot.voice}?sid=${uuid}`;
-      playerRef.current.play()
-        .catch(error => alert(`Play error: ${error}`));
-      playerRef.current.addEventListener('ended', () => {
-        resolve();
-      });
-    });
-
-    setRobotReady(true);
-    info(`Stage started, AI is ready`);
-    verbose(`Stage started, AI is ready, sid=${uuid}`);
-  }, [verbose, playerRef, setRobot, setStageUUID, robotReady]);
+  // The robot initialize and select UI.
+  const [robot, stageUUID, robotReady, robotPanel] = useRobotInitiator(info, verbose, playerRef);
 
   return <>
     <div><audio ref={playerRef} controls={true} hidden={!showVerboseLogs} /></div>
-    {!robot && <SelectRobot {...{info, verbose, onStartStage}}/>}
+    {!robot && robotPanel}
     {robot && logPanel}
     {robot && <AppImpl {...{
       info, verbose, robot, robotReady, stageUUID, playerRef,
@@ -116,18 +88,22 @@ function useDebugPanel({playerRef}) {
   </React.Fragment>];
 }
 
-function SelectRobot({info, verbose, onStartStage}) {
+function useRobotInitiator(info, verbose, playerRef) {
+  // The available robots for user to select.
+  const [availableRobots, setAvailableRobots] = React.useState([]);
+  const [previewRobot, setPreviewRobot] = React.useState(RobotConfig.load());
+  // The uuid and robot in stage, which is unchanged after stage started.
+  const [stageRobot, setStageRobot] = React.useState(null);
+  const [stageUUID, setStageUUID] = React.useState(null);
+  // Whether robot is ready, user're allowd to talk with AI.
+  const [robotReady, setRobotReady] = React.useState(false);
+
   // Whether system is booting.
   const [booting, setBooting] = React.useState(true);
   // Whether system checking, such as should be HTTPS.
   const [allowed, setAllowed] = React.useState(false);
   // Whether we're loading the page and request permission.
   const [loading, setLoading] = React.useState(true);
-
-  // The available robots for user to select.
-  const [robots, setRobots] = React.useState([]);
-  const [robot, setRobot] = React.useState(RobotConfig.load());
-  const [uuid, setUUID] = React.useState(null);
 
   // The application is started now.
   React.useEffect(() => {
@@ -173,7 +149,7 @@ function SelectRobot({info, verbose, onStartStage}) {
       setAllowed(true);
       setBooting(false);
     });
-  }, [setAllowed, setBooting]);
+  }, [info, verbose, setAllowed, setBooting]);
 
   // Request server to create a new stage.
   React.useEffect(() => {
@@ -187,55 +163,75 @@ function SelectRobot({info, verbose, onStartStage}) {
       return response.json();
     }).then((data) => {
       verbose(`Start: Create stage success: ${data.data.sid}, ${data.data.robots.length} robots`);
-      setUUID(data.data.sid);
-      setRobots(data.data.robots);
+      setStageUUID(data.data.sid);
+      setAvailableRobots(data.data.robots);
+      setLoading(false);
 
       const config = RobotConfig.load();
       if (config) {
         const robot = data.data.robots.find(robot => robot.uuid === config.uuid);
         if (robot) {
-          setRobot(robot);
+          setPreviewRobot(robot);
           info(`Use previous robot ${robot.label}`);
           verbose(`Use previous robot ${robot.label} ${robot.uuid}`);
         }
       }
-
-      setLoading(false);
     }).catch((error) => alert(`Create stage error: ${error}`));
-  }, [setLoading, setRobots, setRobot, allowed, setUUID]);
+  }, [setLoading, setAvailableRobots, setPreviewRobot, allowed, setStageUUID]);
+
+  // User start a stage.
+  const onStartStage = React.useCallback(() => {
+    verbose("Start the app");
+    if (!previewRobot || !stageUUID) return;
+    setStageRobot(previewRobot);
+
+    // Play the welcome audio.
+    verbose(`Start: Play hello welcome audio`);
+
+    playerRef.current.src = `/api/ai-talk/examples/${previewRobot.voice}?sid=${stageUUID}`;
+    playerRef.current.play()
+      .catch(error => alert(`Play error: ${error}`));
+    playerRef.current.addEventListener('ended', () => {
+      setRobotReady(true);
+      info(`Stage started, AI is ready`);
+      verbose(`Stage started, AI is ready, sid=${stageUUID}`);
+    });
+  }, [info, verbose, playerRef, setStageRobot, previewRobot, stageUUID, robotReady]);
 
   // User select a robot.
-  const onSelectRobot = React.useCallback((e) => {
+  const onUserSelectRobot = React.useCallback((e) => {
     if (!e.target.value) return;
-    const robot = robots.find(robot => robot.uuid === e.target.value);
-    setRobot(robot);
+    const robot = availableRobots.find(robot => robot.uuid === e.target.value);
+    setPreviewRobot(robot);
     RobotConfig.save(robot);
     info(`Change to robot ${robot.label}`);
     verbose(`Change to robot ${robot.label} ${robot.uuid}`);
-  }, [robots, setRobot]);
+  }, [info, verbose, availableRobots, setPreviewRobot]);
 
-  return <div className='SelectRobotDiv'>
+  return [stageRobot, stageUUID, robotReady, <div className='SelectRobotDiv'>
     {!booting && !allowed && <p style={{color: "red"}}>
       Error: Only allow localhost or https to access microphone.
     </p>}
     <p>
-      {robots?.length ? <React.Fragment>
+      {availableRobots?.length ? <React.Fragment>
         Assistant: &nbsp;
-        <select className='SelectRobot' defaultValue={robot?.uuid}
-                onChange={(e) => onSelectRobot(e)}>
+        <select className='SelectRobot' defaultValue={previewRobot?.uuid}
+                onChange={(e) => onUserSelectRobot(e)}>
           <option value=''>Please select a robot</option>
-          {robots.map(robot => {
+          {availableRobots.map(robot => {
             return <option key={robot.uuid} value={robot.uuid}>{robot.label}</option>;
           })}
         </select> &nbsp;
       </React.Fragment> : ''}
     </p>
     <p>
-      {!loading && robot && <button className='StartButton' onClick={(e) => {
-        onStartStage(uuid, robot);
-      }}>Next</button>}
+      {!loading && previewRobot &&
+        <button className='StartButton'
+                onClick={(e) => onStartStage()}>
+          Next
+        </button>}
     </p>
-  </div>;
+  </div>];
 }
 
 function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {

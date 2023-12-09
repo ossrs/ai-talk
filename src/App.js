@@ -65,14 +65,27 @@ function App() {
     verbose(`Stage started, AI is ready, sid=${uuid}`);
   }, [verbose, playerRef, setRobot, setStageUUID, robotReady]);
 
+  // User click the welcome audio button.
+  const onClickWelcomeAudio = React.useCallback(() => {
+    verbose(`Play example aac audio`);
+    playerRef.current.src = `/api/ai-talk/examples/hello.aac`;
+    playerRef.current.play();
+  }, [verbose, playerRef]);
+
   return <>
-    {robot && <p style={{textAlign: 'right'}}>
+    <div><audio ref={playerRef} controls={true} hidden={!showVerboseLogs} /></div>
+    {robot && <div style={{textAlign: 'right', padding: '10px'}}>
       <button onClick={(e) => {
         verbose(`Set debugging to ${!showVerboseLogs}`);
         setShowVerboseLogs(!showVerboseLogs);
       }}>{!showVerboseLogs ? 'Debug' : 'Quit debugging'}</button> &nbsp;
-    </p>}
-    {!robot && <SelectRobot {...{info, verbose, onStartStage}}/>}
+      {showVerboseLogs && <>
+        <button onClick={(e) => {
+          onClickWelcomeAudio();
+        }}>Welcome audio</button> &nbsp;
+        <a href="https://github.com/winlinvip/ai-talk/discussions" target='_blank'>Help me!</a>
+      </>}
+    </div>}
     {robot && <div className='LogPanel'>
       <ul>
         {showVerboseLogs && verboseLogs.map((log, index) => {
@@ -89,10 +102,9 @@ function App() {
       <div style={{ float:"left", clear: "both" }} ref={logPanelRef}/>
     </div>}
     {robot && <AppImpl {...{
-      info, verbose, robot, robotReady, showVerboseLogs, verboseLogs, infoLogs,
-      stageUUID, playerRef,
+      info, verbose, robot, robotReady, verboseLogs, infoLogs, stageUUID, playerRef,
     }}/>}
-    <p><audio ref={playerRef} controls={true} hidden={!showVerboseLogs} /></p>
+    {!robot && <SelectRobot {...{info, verbose, onStartStage}}/>}
   </>;
 }
 
@@ -218,7 +230,7 @@ function SelectRobot({info, verbose, onStartStage}) {
   </div>;
 }
 
-function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, playerRef}) {
+function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
   const isMobile = useIsMobile();
   const isOssrsNet = useIsOssrsNet();
 
@@ -226,8 +238,6 @@ function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, 
   const [working, setWorking] = React.useState(false);
   // Whether microphone is really working, when state change to active.
   const [micWorking, setMicWorking] = React.useState(false);
-  // Whether be attention to the user, such as processing the user input.
-  const [attention, setAttention] = React.useState(false);
   // Whether AI is processing the user input and generating the response.
   const [processing, setProcessing] = React.useState(false);
 
@@ -266,7 +276,6 @@ function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, 
     ref.current.mediaRecorder.addEventListener("start", () => {
       verbose(`Event: Recording start to record`);
       setMicWorking(true);
-      setAttention(true);
     });
 
     ref.current.mediaRecorder.addEventListener("dataavailable", ({ data }) => {
@@ -276,7 +285,7 @@ function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, 
 
     ref.current.mediaRecorder.start();
     verbose(`Event: Recording started`);
-  }, [info, verbose, robotReady, ref, setMicWorking, setAttention, setWorking]);
+  }, [info, verbose, robotReady, ref, setMicWorking, setWorking]);
 
   // User click stop button, we delay some time to allow cancel the stopping event.
   const stopRecording = React.useCallback(async () => {
@@ -396,7 +405,6 @@ function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, 
         alert(e);
       } finally {
         setProcessing(false);
-        setAttention(false);
         setWorking(false);
         ref.current.mediaRecorder = null;
         ref.current.isRecording = false;
@@ -407,7 +415,7 @@ function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, 
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
     }, 800);
-  }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing, setWorking, setAttention]);
+  }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing, setWorking]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -432,13 +440,6 @@ function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, 
     };
   }, [robotReady, startRecording, stopRecording, processing]);
 
-  // User click the welcome audio button.
-  const onClickWelcomeAudio = React.useCallback(() => {
-    verbose(`Play example aac audio`);
-    playerRef.current.src = `/api/ai-talk/examples/hello.aac`;
-    playerRef.current.play();
-  }, [verbose, playerRef]);
-
   return <>
     <button className="App-header"
             onTouchStart={startRecording}
@@ -448,12 +449,6 @@ function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, 
         {processing ? 'Processing' : working ? '' : (isMobile ? 'Press to talk' : 'Press the R key')}
       </label>
     </button>
-    {showVerboseLogs && <p>
-      <button onClick={(e) => {
-        onClickWelcomeAudio();
-      }}>Welcome audio</button> &nbsp;
-      <a href="https://github.com/winlinvip/ai-talk/discussions" target='_blank'>Help me!</a>
-    </p>}
     {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk" alt=''/>}
   </>;
 }

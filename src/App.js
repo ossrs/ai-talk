@@ -11,7 +11,44 @@ function App() {
 
   // The player ref, to access the audio player.
   const playerRef = React.useRef(null);
+  // The log and debug panel.
+  const [info, verbose, showVerboseLogs, logPanel] = useDebugPanel(playerRef);
 
+  // User start a stage.
+  const onStartStage = React.useCallback(async (uuid, robot) => {
+    verbose("Start the app");
+
+    setStageUUID(uuid);
+    setRobot(robot);
+
+    // Play the welcome audio.
+    await new Promise(resolve => {
+      verbose(`Start: Play hello welcome audio`);
+
+      playerRef.current.src = `/api/ai-talk/examples/${robot.voice}?sid=${uuid}`;
+      playerRef.current.play()
+        .catch(error => alert(`Play error: ${error}`));
+      playerRef.current.addEventListener('ended', () => {
+        resolve();
+      });
+    });
+
+    setRobotReady(true);
+    info(`Stage started, AI is ready`);
+    verbose(`Stage started, AI is ready, sid=${uuid}`);
+  }, [verbose, playerRef, setRobot, setStageUUID, robotReady]);
+
+  return <>
+    <div><audio ref={playerRef} controls={true} hidden={!showVerboseLogs} /></div>
+    {!robot && <SelectRobot {...{info, verbose, onStartStage}}/>}
+    {robot && logPanel}
+    {robot && <AppImpl {...{
+      info, verbose, robot, robotReady, stageUUID, playerRef,
+    }}/>}
+  </>;
+}
+
+function useDebugPanel({playerRef}) {
   // Verbose(detail) and info(summary) logs, show in the log panel.
   const [showVerboseLogs, setShowVerboseLogs] = React.useState(false);
   const [verboseLogs, setVerboseLogs] = React.useState([]);
@@ -41,30 +78,6 @@ function App() {
     logPanelRef?.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [verboseLogs, infoLogs, logPanelRef]);
 
-  // User start a stage.
-  const onStartStage = React.useCallback(async (uuid, robot) => {
-    verbose("Start the app");
-
-    setStageUUID(uuid);
-    setRobot(robot);
-
-    // Play the welcome audio.
-    await new Promise(resolve => {
-      verbose(`Start: Play hello welcome audio`);
-
-      playerRef.current.src = `/api/ai-talk/examples/${robot.voice}?sid=${uuid}`;
-      playerRef.current.play()
-        .catch(error => alert(`Play error: ${error}`));
-      playerRef.current.addEventListener('ended', () => {
-        resolve();
-      });
-    });
-
-    setRobotReady(true);
-    info(`Stage started, AI is ready`);
-    verbose(`Stage started, AI is ready, sid=${uuid}`);
-  }, [verbose, playerRef, setRobot, setStageUUID, robotReady]);
-
   // User click the welcome audio button.
   const onClickWelcomeAudio = React.useCallback(() => {
     verbose(`Play example aac audio`);
@@ -72,9 +85,8 @@ function App() {
     playerRef.current.play();
   }, [verbose, playerRef]);
 
-  return <>
-    <div><audio ref={playerRef} controls={true} hidden={!showVerboseLogs} /></div>
-    {robot && <div style={{textAlign: 'right', padding: '10px'}}>
+  return [info, verbose, showVerboseLogs, <React.Fragment>
+    <div style={{textAlign: 'right', padding: '10px'}}>
       <button onClick={(e) => {
         verbose(`Set debugging to ${!showVerboseLogs}`);
         setShowVerboseLogs(!showVerboseLogs);
@@ -85,8 +97,8 @@ function App() {
         }}>Welcome audio</button> &nbsp;
         <a href="https://github.com/winlinvip/ai-talk/discussions" target='_blank'>Help me!</a>
       </>}
-    </div>}
-    {robot && <div className='LogPanel'>
+    </div>
+    <div className='LogPanel'>
       <ul>
         {showVerboseLogs && verboseLogs.map((log, index) => {
           return (<li key={index}>{log}</li>);
@@ -100,12 +112,8 @@ function App() {
         })}
       </ul>
       <div style={{ float:"left", clear: "both" }} ref={logPanelRef}/>
-    </div>}
-    {robot && <AppImpl {...{
-      info, verbose, robot, robotReady, verboseLogs, infoLogs, stageUUID, playerRef,
-    }}/>}
-    {!robot && <SelectRobot {...{info, verbose, onStartStage}}/>}
-  </>;
+    </div>
+  </React.Fragment>];
 }
 
 function SelectRobot({info, verbose, onStartStage}) {

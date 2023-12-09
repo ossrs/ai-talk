@@ -420,7 +420,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
-    }, 800);
+    }, 300);
   }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing, setWorking]);
 
   // Setup the keyboard event, for PC browser.
@@ -451,8 +451,8 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
             disabled={!robotReady || processing}>
-      <label className={!working ? 'StaticButton' : processing ? 'ProcessingButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}>
-        {processing ? 'Processing' : working ? '' : (isMobile ? 'Press to talk' : 'Press the R key')}
+      <label className={!robotReady ? 'DisabledButton' : !working ? 'StaticButton' : processing ? 'ProcessingButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}>
+        {!robotReady ? 'Booting...' : processing ? 'Processing' : working ? '' : (isMobile ? 'Press to talk' : 'Press the R key')}
       </label>
     </button>
     {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk" alt=''/>}

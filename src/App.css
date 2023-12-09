@@ -1,33 +1,25 @@
-.StaticButton, .DynamicButton, .RecordingButton, .ProcessingButton {
+.DisabledButton, .StaticButton, .DynamicButton, .RecordingButton, .ProcessingButton {
   font-size: 14px;
   text-align: center;
-  background-color: buttonface;
-  color: buttontext;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 30%;
   user-select:none;
-}
-
-.StaticButton {
-  width: 150px;
-  height: 150px;
-}
-
-.DynamicButton, .RecordingButton, .ProcessingButton {
-  width: 150px;
-  height: 150px;
+  background-color: #ffffff;
+  color: #555555;
+  font-weight: bold;
+  width: 170px;
+  height: 170px;
 }
 
 .RecordingButton {
-  width: 200px;
-  height: 200px;
   background-color: rgba(0, 200, 0, 0.7);
 }
 
-.ProcessingButton {
-  background-color: rgba(0, 100, 0, 0.7);
+.ProcessingButton, .DisabledButton {
+  background-color: #aaaaaa;
+  color: #777777;
 }
 
 .StartButton {

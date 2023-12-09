@@ -111,6 +111,7 @@ Optionally, additional robots can be incorporated into various environments:
 * `AIT_ROBOT_0_PROMPT`: The prompt for extra robot `#0`, for example, `I want you to act as a spoken English teacher and improver.`.
 * `AIT_ROBOT_0_ASR_LANGUAGE`: The language for extra robot `#0`, see `AIT_ASR_LANGUAGE`, default to `en`.
 * `AIT_ROBOT_0_PREFIX`: (Optional) The prefix for the first sentence for extra robot `#0`, see `AIT_REPLY_PREFIX`.
+* `AIT_ROBOT_0_REPLY_LIMIT`: (Optional) The limit words for extra robot `#0`, default to `AIT_REPLY_LIMIT`.
 
 Less frequently used optional environment variables:
 
@@ -121,7 +122,7 @@ Less frequently used optional environment variables:
 * `AIT_MAX_TOKENS`: The max tokens, default to `1024`.
 * `AIT_TEMPERATURE`: The temperature, default to `0.9`.
 * `AIT_KEEP_FILES`: Whether keep audio files, default to `false`.
-* `AIT_REPLY_LIMIT`: The AI reply limit words, default to `50`.
+* `AIT_REPLY_LIMIT`: The AI reply limit words, default to `30`.
 * `AIT_CHAT_WINDOW`: The AI chat window to store historical messages, default to `5`.
 * `AIT_DEFAULT_ROBOT`: Whether enable the default robot, prompt is `AIT_SYSTEM_PROMPT`, default to `true`.
 * `AIT_STAGE_TIMEOUT`: The timeout in seconds for each stage, default to `300`.
@@ -155,5 +156,6 @@ The changelog:
   * Fast require microphone permission. v1.0.16
   * Save user select robot to local storage. [v1.0.17](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.17)
   * Refine the UI and history message style. v1.0.18
+  * Limit to 30 words and config in robot. v1.0.19
 
 Winlin, 2023.12

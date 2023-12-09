@@ -54,6 +54,8 @@ type Robot struct {
 	prefix string
 	// The welcome voice url.
 	voice string
+	// Reply words limit.
+	replyLimit int
 }
 
 // Get the robot by uuid.
@@ -72,7 +74,7 @@ func (v Robot) String() string {
 	if v.prefix != "" {
 		sb.WriteString(fmt.Sprintf(",prefix:%v", v.prefix))
 	}
-	sb.WriteString(fmt.Sprintf(",voice=%v,prompt:%v", v.voice, v.prompt))
+	sb.WriteString(fmt.Sprintf(",voice=%v,limit=%v,prompt:%v", v.voice, v.replyLimit, v.prompt))
 	return sb.String()
 }
 
@@ -684,7 +686,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	stage.previousAssitant = ""
 
 	system := robot.prompt
-	system += fmt.Sprintf("Keep your reply neat, limiting the reply to %v words.", os.Getenv("AIT_REPLY_LIMIT"))
+	system += fmt.Sprintf("Keep your reply neat, limiting the reply to %v words.", robot.replyLimit)
 	logger.Tf(ctx, "AI system prompt: %v", system)
 	messages := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: system},
@@ -1182,7 +1184,7 @@ func doConfig(ctx context.Context) error {
 	setEnvDefault("AIT_TEMPERATURE", "0.9")
 	setEnvDefault("AIT_KEEP_FILES", "false")
 	setEnvDefault("AIT_ASR_LANGUAGE", "en")
-	setEnvDefault("AIT_REPLY_LIMIT", "50")
+	setEnvDefault("AIT_REPLY_LIMIT", "30")
 	setEnvDefault("AIT_DEVELOPMENT", "true")
 	setEnvDefault("AIT_CHAT_WINDOW", "5")
 	setEnvDefault("AIT_EXTRA_ROBOTS", "0")
@@ -1217,10 +1219,15 @@ func doConfig(ctx context.Context) error {
 	)
 
 	// Config all robots.
+	globalReplylimit, err := strconv.ParseInt(os.Getenv("AIT_REPLY_LIMIT"), 10, 64)
+	if err != nil {
+		return errors.Wrapf(err, "parse AIT_REPLY_LIMIT %v", os.Getenv("AIT_REPLY_LIMIT"))
+	}
+
 	if os.Getenv("AIT_DEFAULT_ROBOT") == "true" {
 		robots = append(robots, &Robot{
 			uuid: "default", label: "Default", asrLanguage: os.Getenv("AIT_ASR_LANGUAGE"),
-			prompt: os.Getenv("AIT_SYSTEM_PROMPT"), voice: "hello-english.aac",
+			replyLimit: int(globalReplylimit), prompt: os.Getenv("AIT_SYSTEM_PROMPT"), voice: "hello-english.aac",
 		})
 	}
 
@@ -1235,8 +1242,17 @@ func doConfig(ctx context.Context) error {
 				voice = "hello-chinese.aac"
 			}
 
+			replyLimit := globalReplylimit
+			if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_LIMIT", i)) != "" {
+				if iv, err := strconv.ParseInt(os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_LIMIT", i)), 10, 64); err != nil {
+					return errors.Wrapf(err, "parse AIT_REPLY_LIMIT %v", os.Getenv("AIT_REPLY_LIMIT"))
+				} else {
+					replyLimit = iv
+				}
+			}
+
 			robots = append(robots, &Robot{
-				voice:  voice,
+				voice: voice, replyLimit: int(replyLimit),
 				uuid:   os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ID", i)),
 				label:  os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i)),
 				prompt: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i)),

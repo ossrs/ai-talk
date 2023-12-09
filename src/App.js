@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.css';
-import {RobotConfig, useIsMobile, useIsOssrsNet, buildLog} from "./utils";
+import {RobotConfig, useIsMobile, useIsOssrsNet, buildLog, buildTimeString} from "./utils";
 
 function App() {
   // The player ref, to access the audio player.
@@ -12,11 +12,8 @@ function App() {
 
   return <>
     <div><audio ref={playerRef} controls={true} hidden={!showVerboseLogs} /></div>
-    {!robot && robotPanel}
-    {robot && logPanel}
-    {robot && <AppImpl {...{
-      info, verbose, robot, robotReady, stageUUID, playerRef,
-    }}/>}
+    {robot ? logPanel : robotPanel}
+    {robot && <AppImpl {...{info, verbose, robot, robotReady, stageUUID, playerRef}}/>}
   </>;
 }
 
@@ -71,18 +68,18 @@ function useDebugPanel({playerRef}) {
       </>}
     </div>
     <div className='LogPanel'>
-      <ul>
+      <div>
         {showVerboseLogs && verboseLogs.map((log, index) => {
-          return (<li key={index}>{log}</li>);
+          return (<div key={index}>{log}</div>);
         })}
         {!showVerboseLogs && infoLogs.map((log, index) => {
           const you = log.indexOf('You:') === 0;
           const bot = log.indexOf('Bot:') === 0;
           const color = you ? 'darkgreen' : (bot ? 'darkblue' : '');
           const fontWeight = you ? 'bold' : 'normal';
-          return (<li key={index} style={{color,fontWeight}}>{log}</li>);
+          return (<div key={index} style={{color,fontWeight}}>{log ? log : <br/>}</div>);
         })}
-      </ul>
+      </div>
       <div style={{ float:"left", clear: "both" }} ref={logPanelRef}/>
     </div>
   </React.Fragment>];
@@ -249,6 +246,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
 
   // The refs, about the logs and audio chunks model.
   const ref = React.useRef({
+    count: 0,
     isRecording: false,
     stopHandler: null,
     mediaRecorder: null,
@@ -262,10 +260,11 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     if (ref.current.mediaRecorder) return;
     if (ref.current.isRecording) return;
     ref.current.isRecording = true;
+    ref.current.count += 1;
 
     setWorking(true);
     verbose("=============");
-    info("=============");
+    info('');
 
     const stream = await new Promise(resolve => {
       navigator.mediaDevices.getUserMedia(

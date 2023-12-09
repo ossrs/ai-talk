@@ -154,5 +154,6 @@ The changelog:
   * Refine the UI for mobile browser. v1.0.15
   * Fast require microphone permission. v1.0.16
   * Save user select robot to local storage. [v1.0.17](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.17)
+  * Refine the UI and history message style. v1.0.18
 
 Winlin, 2023.12

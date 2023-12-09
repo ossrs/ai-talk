@@ -454,7 +454,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
             onTouchEnd={stopRecording}
             disabled={!robotReady || processing}>
       <div className={micWorking ? 'gn-active' : 'gn'}>
-        <div className={micWorking ? 'mc-active' : 'mc'}></div>
+        <div className='mc'></div>
       </div>
     </div>
     {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk" alt=''/>}

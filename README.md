@@ -153,6 +153,6 @@ The changelog:
   * Add micWorking and attention state to avoid data loss. v1.0.14
   * Refine the UI for mobile browser. v1.0.15
   * Fast require microphone permission. v1.0.16
-  * Save user select robot to local storage. v1.0.17
+  * Save user select robot to local storage. [v1.0.17](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.17)
 
 Winlin, 2023.12

@@ -6,9 +6,8 @@ function App() {
   // User selected robot.
   const [robot, setRobot] = React.useState(null);
   const [stageUUID, setStageUUID] = React.useState(null);
-
-  // Whether stage is starged, user're allowd to talk with AI.
-  const [started, setStarted] = React.useState(false);
+  // Whether robot is ready, user're allowd to talk with AI.
+  const [robotReady, setRobotReady] = React.useState(false);
 
   // The player ref, to access the audio player.
   const playerRef = React.useRef(null);
@@ -61,10 +60,10 @@ function App() {
       });
     });
 
-    setStarted(true);
+    setRobotReady(true);
     info(`Stage started, AI is ready`);
     verbose(`Stage started, AI is ready, sid=${uuid}`);
-  }, [verbose, playerRef, setRobot, setStageUUID, setStarted]);
+  }, [verbose, playerRef, setRobot, setStageUUID, robotReady]);
 
   return <>
     {robot && <p style={{textAlign: 'right'}}>
@@ -90,7 +89,7 @@ function App() {
       <div style={{ float:"left", clear: "both" }} ref={logPanelRef}/>
     </div>}
     {robot && <AppImpl {...{
-      info, verbose, robot, started, showVerboseLogs, verboseLogs, infoLogs,
+      info, verbose, robot, robotReady, showVerboseLogs, verboseLogs, infoLogs,
       stageUUID, playerRef,
     }}/>}
     <p><audio ref={playerRef} controls={true} hidden={!showVerboseLogs} /></p>
@@ -219,7 +218,7 @@ function SelectRobot({info, verbose, onStartStage}) {
   </div>;
 }
 
-function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, playerRef}) {
+function AppImpl({info, verbose, robot, robotReady, showVerboseLogs, stageUUID, playerRef}) {
   const isMobile = useIsMobile();
   const isOssrsNet = useIsOssrsNet();
 
@@ -242,7 +241,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
 
   // User start a conversation, by recording input.
   const startRecording = React.useCallback(async () => {
-    if (!started) return;
+    if (!robotReady) return;
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     if (ref.current.mediaRecorder) return;
     if (ref.current.isRecording) return;
@@ -277,11 +276,11 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
 
     ref.current.mediaRecorder.start();
     verbose(`Event: Recording started`);
-  }, [info, verbose, started, ref, setMicWorking, setAttention, setWorking]);
+  }, [info, verbose, robotReady, ref, setMicWorking, setAttention, setWorking]);
 
   // User click stop button, we delay some time to allow cancel the stopping event.
   const stopRecording = React.useCallback(async () => {
-    if (!started) return;
+    if (!robotReady) return;
 
     const stopRecordingImpl = async () => {
       if (!ref.current.mediaRecorder) return;
@@ -408,11 +407,11 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
     }, 800);
-  }, [info, verbose, playerRef, stageUUID, robot, started, ref, setProcessing, setWorking, setAttention]);
+  }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing, setWorking, setAttention]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
-    if (!started) return;
+    if (!robotReady) return;
 
     const handleKeyDown = (e) => {
       if (processing) return;
@@ -431,7 +430,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [started, startRecording, stopRecording, processing]);
+  }, [robotReady, startRecording, stopRecording, processing]);
 
   // User click the welcome audio button.
   const onClickWelcomeAudio = React.useCallback(() => {
@@ -444,7 +443,7 @@ function AppImpl({info, verbose, robot, started, showVerboseLogs, stageUUID, pla
     <button className="App-header"
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
-            disabled={!started || processing}>
+            disabled={!robotReady || processing}>
       <label className={!working ? 'StaticButton' : processing ? 'ProcessingButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}>
         {processing ? 'Processing' : working ? '' : (isMobile ? 'Press to talk' : 'Press the R key')}
       </label>

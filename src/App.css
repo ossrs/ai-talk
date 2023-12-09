@@ -1,25 +1,59 @@
-.DisabledButton, .StaticButton, .DynamicButton, .RecordingButton, .ProcessingButton {
-  font-size: 14px;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 30%;
-  user-select:none;
-  background-color: #ffffff;
-  color: #555555;
-  font-weight: bold;
-  width: 170px;
-  height: 170px;
+
+.gn, .gn-active{
+  position:relative;
+  margin: 5% auto;
+  border-radius:50%;
+  width:10em; height:10em;
+}
+:before, :after{
+  content:'';
+  position:absolute;
+}
+.gn:after, .gn-active:after {
+  top:30%; left:43%;
+  height:15%; width:14%;
+  border-top-left-radius:50%;
+  border-top-right-radius:50%;
+}
+.gn:before, .gn-active:before {
+  top:40%; left:43%;
+  height:15%; width:14%;
+  border-bottom-left-radius:50%;
+  border-bottom-right-radius:50%;
+}
+.mc, .mc-active{
+  position:absolute;
+  top:50%; left:37%;
+  height:24%;
+  width:26.5%;
+  overflow:hidden;
+}
+.mc:before, .mc-active:before{
+  bottom:50%;
+  width:100%; height:100%;
+  box-sizing:border-box;
+  border-radius:50%;
+  background:none;
+}
+.mc:after, .mc-active:after{
+  top:50%; left:40%;
+  width:20%; height:25%;
 }
 
-.RecordingButton {
-  background-color: rgba(0, 200, 0, 0.7);
+.gn {
+  background-color: #787878;
 }
-
-.ProcessingButton, .DisabledButton {
-  background-color: #aaaaaa;
-  color: #777777;
+.gn-active {
+  background-color: #60B460;
+}
+:before, :after {
+  background-color: #fff;
+}
+.mc:before, .mc-active:before {
+  border: 0.5em solid #fff;
+}
+.App-header {
+  background-color: #555555;
 }
 
 .StartButton {
@@ -32,7 +66,7 @@
   min-height: 35vh;
   overflow: scroll;
   height: 35vh;
-  padding: 10px 10px 20px 10px;
+  padding: 10px 10px 0px 10px;
   margin-bottom: 25px;
 }
 
@@ -56,7 +90,6 @@
 }
 
 .App-header {
-  background-color: #555555;
   min-height: 40vh;
   min-width: 100vw;
   display: flex;
@@ -66,6 +99,7 @@
   font-size: calc(10px + 2vmin);
   color: white;
   user-select:none;
+  border-radius: 3%;
 }
 
 .App-link {

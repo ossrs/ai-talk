@@ -242,11 +242,8 @@ function useRobotInitiator(info, verbose, playerRef) {
 }
 
 function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
-  const isMobile = useIsMobile();
   const isOssrsNet = useIsOssrsNet();
 
-  // Whether user is having a conversation with AI, from user speak, util AI speak.
-  const [working, setWorking] = React.useState(false);
   // Whether microphone is really working, when state change to active.
   const [micWorking, setMicWorking] = React.useState(false);
   // Whether AI is processing the user input and generating the response.
@@ -270,7 +267,6 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     ref.current.isRecording = true;
     ref.current.count += 1;
 
-    setWorking(true);
     verbose("=============");
     info('');
 
@@ -298,7 +294,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
 
     ref.current.mediaRecorder.start();
     verbose(`Event: Recording started`);
-  }, [info, verbose, robotReady, ref, setMicWorking, setWorking]);
+  }, [info, verbose, robotReady, ref, setMicWorking]);
 
   // User click stop button, we delay some time to allow cancel the stopping event.
   const stopRecording = React.useCallback(async () => {
@@ -418,7 +414,6 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
         alert(e);
       } finally {
         setProcessing(false);
-        setWorking(false);
         ref.current.mediaRecorder = null;
         ref.current.isRecording = false;
       }
@@ -428,7 +423,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
     }, 300);
-  }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing, setWorking]);
+  }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -454,14 +449,14 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
   }, [robotReady, startRecording, stopRecording, processing]);
 
   return <>
-    <button className="App-header"
+    <div className="App-header"
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
             disabled={!robotReady || processing}>
-      <label className={!robotReady ? 'DisabledButton' : !working ? 'StaticButton' : processing ? 'ProcessingButton' : micWorking ? 'RecordingButton' : 'DynamicButton'}>
-        {!robotReady ? 'Booting...' : processing ? 'Processing' : working ? '' : (isMobile ? 'Press to talk' : 'Press the R key')}
-      </label>
-    </button>
+      <div className={micWorking ? 'gn-active' : 'gn'}>
+        <div className={micWorking ? 'mc-active' : 'mc'}></div>
+      </div>
+    </div>
     {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk" alt=''/>}
   </>;
 }

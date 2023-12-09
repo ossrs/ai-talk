@@ -157,5 +157,6 @@ The changelog:
   * Save user select robot to local storage. [v1.0.17](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.17)
   * Refine the UI and history message style. v1.0.18
   * Limit to 30 words and config in robot. v1.0.19
+  * Use css to draw a microphone icon. [v1.0.20](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.20)
 
 Winlin, 2023.12

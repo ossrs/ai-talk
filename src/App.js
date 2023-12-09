@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.css';
-import {RobotConfig, useIsMobile, useIsOssrsNet, buildLog, buildTimeString} from "./utils";
+import {RobotConfig, useIsMobile, useIsOssrsNet, buildLog} from "./utils";
 
 function App() {
   // The player ref, to access the audio player.
@@ -41,6 +41,13 @@ function useDebugPanel({playerRef}) {
     setVerboseLogs(ref.current.verboseLogs);
   }, [ref, setVerboseLogs]);
 
+  // Insert some empty lines to info log.
+  React.useEffect(() => {
+    for (let i = 0; i < 30; i++) {
+      info('');
+    }
+  }, [info]);
+
   // Scroll the log panel.
   const logPanelRef = React.useRef(null);
   React.useEffect(() => {
@@ -77,7 +84,8 @@ function useDebugPanel({playerRef}) {
           const bot = log.indexOf('Bot:') === 0;
           const color = you ? 'darkgreen' : (bot ? 'darkblue' : '');
           const fontWeight = you ? 'bold' : 'normal';
-          return (<div key={index} style={{color,fontWeight}}>{log ? log : <br/>}</div>);
+          const msg = log ? log : index === infoLogs.length - 1 ? <div><br/><br/><b>Loading...</b></div> : <br/>;
+          return (<div key={index} style={{color,fontWeight}}>{msg}</div>);
         })}
       </div>
       <div style={{ float:"left", clear: "both" }} ref={logPanelRef}/>

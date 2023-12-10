@@ -12,7 +12,7 @@ Please setup the envirionments:
 AIT_SYSTEM_PROMPT='You are a helpful assistant.'
 ```
 
-https://github.com/ossrs/ai-talk/assets/2777660/2d6710f0-9f71-4508-8ba7-7898da4673e1
+https://github.com/ossrs/ai-talk/assets/2777660/57599a76-37d7-4b12-99be-cb3b96e1742a
 </details>
 
 <details>
@@ -23,7 +23,7 @@ Please setup the envirionments:
 AIT_SYSTEM_PROMPT='I want you to act as a spoken English teacher and improver. I will speak to you in English and you will reply to me in English to practice my spoken English. I want you to  I want you to strictly correct my grammar mistakes, typos, and factual errors. I want you to ask me a question in your reply. Now let us start practicing, you could ask me a question first. Remember, I want you to strictly correct my grammar mistakes, typos, and factual errors.'
 ```
     
-https://github.com/ossrs/ai-talk/assets/2777660/07a5dfed-8120-4ec1-a18b-abb2fd6de349
+https://github.com/ossrs/ai-talk/assets/2777660/b797e8a4-7656-410b-8250-e0abaa4b037d
 </details>
 
 <details>
@@ -34,7 +34,7 @@ Please setup the envirionments:
 AIT_SYSTEM_PROMPT='Translate to simple and easy to understand english. Never answer questions but only translate text to English.'
 ```
 
-https://github.com/ossrs/ai-talk/assets/2777660/e9796775-0e60-4ac3-a641-12206af9af63
+https://github.com/ossrs/ai-talk/assets/2777660/a33e56c2-0f88-499f-8e4a-7b537a1e9ba9
 </details>
 
 <details>
@@ -46,7 +46,7 @@ AIT_ASR_LANGUAGE=zh
 AIT_SYSTEM_PROMPT='我希望你是一个儿童的词语接龙的助手。我希望你做两个词的词语接龙。我希望你不要用重复的词语。我希望你重复我说的词，然后再接龙。我希望你回答时，解释下词语的含义。请记住，你讲的答案是给6岁小孩听得懂的。请记住，你要做词语接龙。例如：我：苹果。你：苹果，果园。苹果，是一种水果，长在树上，是红色的。果园，是一种地方，有很多树，有很多果子。'
 ```
 
-https://github.com/ossrs/ai-talk/assets/2777660/175b100b-8eba-45ca-ac41-0484d026d623
+https://github.com/ossrs/ai-talk/assets/2777660/bb350595-23a6-47df-a050-c931699ac7e3
 </details>
     
 > Note: You can find more prompts from [awesome-chatgpt-prompts](https://github.com/f/awesome-chatgpt-prompts).

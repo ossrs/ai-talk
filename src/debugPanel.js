@@ -1,7 +1,7 @@
 import React from "react";
 import {buildLog} from "./utils";
 
-export function useDebugPanel({playerRef}) {
+export function useDebugPanel(playerRef) {
   // Verbose(detail) and info(summary) logs, show in the log panel.
   const [showVerboseLogs, setShowVerboseLogs] = React.useState(false);
   const [verboseLogs, setVerboseLogs] = React.useState([]);

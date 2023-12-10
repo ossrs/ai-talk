@@ -108,12 +108,14 @@ export function useRobotInitiator(info, verbose, playerRef) {
 
     const listener = () => {
       playerRef.current.removeEventListener('ended', listener);
+
       setRobotReady(true);
       info(`Conversation started, AI is ready`);
       verbose(`Stage started, AI is ready, sid=${stageUUID}`);
     };
     playerRef.current.addEventListener('ended', listener);
 
+    info(''); // Insert a empty line to show loading the resource.
     playerRef.current.src = `/api/ai-talk/examples/${previewRobot.voice}?sid=${stageUUID}`;
     playerRef.current.play().catch(error => alert(`Play error: ${error}`));
   }, [info, verbose, playerRef, setStageRobot, previewRobot, stageUUID, robotReady]);

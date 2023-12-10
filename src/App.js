@@ -107,7 +107,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
         ref.current.mediaRecorder.stop();
       });
 
-      info('');
+      info(''); // Insert a empty line to show loading of user input.
       setTalking(false);
       setMicWorking(false);
       setProcessing(true);

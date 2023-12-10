@@ -141,22 +141,22 @@ Please make sure the file `/path/to/domain.crt` and `/path/to/domain.key` exists
 
 The changelog:
 
-* v1.0:
-  * Support mobile and PC browser. v1.0.0
-  * Request microphone permission when starting. v1.0.2
-  * Support single assistant to talk with. v1.0.3
-  * Dispose recorder and stream when record done. v1.0.4
-  * Setup the website title to AI Talk whatever. v1.0.6
-  * Limit the response words to 50 words by default. v1.0.10
-  * Support multiple assistants and select before start. v1.0.11
-  * Setup model and robots by environment variables. [v1.0.12](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.12)
-  * Fix Android browser select button label issue. v1.0.13
-  * Add micWorking and attention state to avoid data loss. v1.0.14
-  * Refine the UI for mobile browser. v1.0.15
-  * Fast require microphone permission. v1.0.16
-  * Save user select robot to local storage. [v1.0.17](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.17)
-  * Refine the UI and history message style. v1.0.18
-  * Limit to 30 words and config in robot. v1.0.19
-  * Use css to draw a microphone icon. [v1.0.20](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.20)
+* Support mobile and PC browser. v1.0.0
+* Request microphone permission when starting. v1.0.2
+* Support single assistant to talk with. v1.0.3
+* Dispose recorder and stream when record done. v1.0.4
+* Setup the website title to AI Talk whatever. v1.0.6
+* Limit the response words to 50 words by default. v1.0.10
+* Support multiple assistants and select before start. v1.0.11
+* Setup model and robots by environment variables. [v1.0.12](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.12)
+* Fix Android browser select button label issue. v1.0.13
+* Add micWorking and attention state to avoid data loss. v1.0.14
+* Refine the UI for mobile browser. v1.0.15
+* Fast require microphone permission. v1.0.16
+* Save user select robot to local storage. [v1.0.17](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.17)
+* Refine the UI and history message style. v1.0.18
+* Limit to 30 words and config in robot. v1.0.19
+* Use css to draw a microphone icon. [v1.0.20](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.20)
+* Refine the data loss before and after record. v1.0.21
 
 Winlin, 2023.12

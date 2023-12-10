@@ -55,7 +55,7 @@ export function useDebugPanel(playerRef) {
         <button onClick={(e) => {
           onClickWelcomeAudio();
         }}>Welcome audio</button> &nbsp;
-        <a href="https://github.com/winlinvip/ai-talk/discussions" target='_blank'>Help me!</a>
+        <a href="https://github.com/ossrs/ai-talk/discussions" target='_blank'>Help me!</a>
       </>}
     </div>
     <div className='LogPanel'>

@@ -258,7 +258,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
             disabled={!robotReady || processing}>
-      {!processing && <div>
+      {robotReady && !processing && <div>
         <div className={micWorking ? 'gn-active' : 'gn'}>
           <div className='mc'></div>
         </div>

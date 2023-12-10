@@ -56,6 +56,8 @@ type Robot struct {
 	voice string
 	// Reply words limit.
 	replyLimit int
+	// AI Chat model.
+	chatModel string
 }
 
 // Get the robot by uuid.
@@ -74,7 +76,8 @@ func (v Robot) String() string {
 	if v.prefix != "" {
 		sb.WriteString(fmt.Sprintf(",prefix:%v", v.prefix))
 	}
-	sb.WriteString(fmt.Sprintf(",voice=%v,limit=%v,prompt:%v", v.voice, v.replyLimit, v.prompt))
+	sb.WriteString(fmt.Sprintf(",voice=%v,limit=%v,model=%v,prompt:%v",
+		v.voice, v.replyLimit, v.chatModel, v.prompt))
 	return sb.String()
 }
 
@@ -698,7 +701,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		Content: stage.previousAsrText,
 	})
 
-	model := os.Getenv("AIT_CHAT_MODEL")
+	model := robot.chatModel
 	var maxTokens int
 	if v, err := strconv.ParseInt(os.Getenv("AIT_MAX_TOKENS"), 10, 64); err != nil {
 		return errors.Wrapf(err, "parse AIT_MAX_TOKENS %v", os.Getenv("AIT_MAX_TOKENS"))
@@ -1242,20 +1245,24 @@ func doConfig(ctx context.Context) error {
 				voice = "hello-chinese.aac"
 			}
 
-			replyLimit := globalReplylimit
+			replyLimit := int(globalReplylimit)
 			if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_LIMIT", i)) != "" {
 				if iv, err := strconv.ParseInt(os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_LIMIT", i)), 10, 64); err != nil {
 					return errors.Wrapf(err, "parse AIT_REPLY_LIMIT %v", os.Getenv("AIT_REPLY_LIMIT"))
 				} else {
-					replyLimit = iv
+					replyLimit = int(iv)
 				}
 			}
 
+			chatModel := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_MODEL", i))
+			if chatModel == "" {
+				chatModel = os.Getenv("AIT_CHAT_MODEL")
+			}
+
 			robots = append(robots, &Robot{
-				voice: voice, replyLimit: int(replyLimit),
-				uuid:   os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ID", i)),
-				label:  os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i)),
-				prompt: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i)),
+				voice: voice, uuid: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ID", i)),
+				replyLimit: replyLimit, label: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i)),
+				chatModel: chatModel, prompt: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i)),
 				prefix: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i)),
 				// The ASR language for whisper.
 				asrLanguage: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)),

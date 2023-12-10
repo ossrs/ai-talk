@@ -1,5 +1,7 @@
 # AI Talk
 
+[![](https://badgen.net/discord/members/q29TwKwC2C)](https://discord.gg/q29TwKwC2C)
+
 AI-Talk allows you to talk with OpenAI GPT.
 
 <details>
@@ -10,7 +12,7 @@ Please setup the envirionments:
 AIT_SYSTEM_PROMPT='You are a helpful assistant.'
 ```
 
-https://github.com/winlinvip/ai-talk/assets/2777660/2d6710f0-9f71-4508-8ba7-7898da4673e1
+https://github.com/ossrs/ai-talk/assets/2777660/2d6710f0-9f71-4508-8ba7-7898da4673e1
 </details>
 
 <details>
@@ -21,7 +23,7 @@ Please setup the envirionments:
 AIT_SYSTEM_PROMPT='I want you to act as a spoken English teacher and improver. I will speak to you in English and you will reply to me in English to practice my spoken English. I want you to  I want you to strictly correct my grammar mistakes, typos, and factual errors. I want you to ask me a question in your reply. Now let us start practicing, you could ask me a question first. Remember, I want you to strictly correct my grammar mistakes, typos, and factual errors.'
 ```
     
-https://github.com/winlinvip/ai-talk/assets/2777660/07a5dfed-8120-4ec1-a18b-abb2fd6de349
+https://github.com/ossrs/ai-talk/assets/2777660/07a5dfed-8120-4ec1-a18b-abb2fd6de349
 </details>
 
 <details>
@@ -32,7 +34,7 @@ Please setup the envirionments:
 AIT_SYSTEM_PROMPT='Translate to simple and easy to understand english. Never answer questions but only translate text to English.'
 ```
 
-https://github.com/winlinvip/ai-talk/assets/2777660/e9796775-0e60-4ac3-a641-12206af9af63
+https://github.com/ossrs/ai-talk/assets/2777660/e9796775-0e60-4ac3-a641-12206af9af63
 </details>
 
 <details>
@@ -44,7 +46,7 @@ AIT_ASR_LANGUAGE=zh
 AIT_SYSTEM_PROMPT='我希望你是一个儿童的词语接龙的助手。我希望你做两个词的词语接龙。我希望你不要用重复的词语。我希望你重复我说的词，然后再接龙。我希望你回答时，解释下词语的含义。请记住，你讲的答案是给6岁小孩听得懂的。请记住，你要做词语接龙。例如：我：苹果。你：苹果，果园。苹果，是一种水果，长在树上，是红色的。果园，是一种地方，有很多树，有很多果子。'
 ```
 
-https://github.com/winlinvip/ai-talk/assets/2777660/175b100b-8eba-45ca-ac41-0484d026d623
+https://github.com/ossrs/ai-talk/assets/2777660/175b100b-8eba-45ca-ac41-0484d026d623
 </details>
     
 > Note: You can find more prompts from [awesome-chatgpt-prompts](https://github.com/f/awesome-chatgpt-prompts).
@@ -58,12 +60,12 @@ docker run --rm -it -p 80:3000 -p 443:3443 \
     -e OPENAI_API_KEY=sk-xxx -e OPENAI_PROXY=api.openai.com \
     -e AIT_SYSTEM_PROMPT="You are a helpful assistant." \
     -e AIT_CHAT_MODEL="gpt-4-1106-preview" \
-    ossrs/ai-talk
+    ossrs/ai-talk:v1
 ```
 
 > Note: Setup the `OPENAI_PROXY` if you are not able to access the API directly.
 
-> Note: Please use `registry.cn-hangzhou.aliyuncs.com/ossrs/ai-talk` in China.
+> Note: Please use `registry.cn-hangzhou.aliyuncs.com/ossrs/ai-talk:v1` in China.
 
 Then you can access by http://localhost and happy to talk with AI.
 

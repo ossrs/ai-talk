@@ -130,6 +130,10 @@ export function useRobotInitiator(info, verbose, playerRef) {
       Error: Only allow localhost or https to access microphone.
     </p>}
     <p>
+      <a href='https://github.com/ossrs/ai-talk/discussions' target='_blank'>Github</a> &nbsp;
+      <a href='https://discord.gg/q29TwKwC2C' target='_blank'>Discord</a>
+    </p>
+    <p>
       {availableRobots?.length ? <React.Fragment>
         Assistant: &nbsp;
         <select className='SelectRobot' defaultValue={previewRobot?.uuid}
@@ -142,11 +146,11 @@ export function useRobotInitiator(info, verbose, playerRef) {
       </React.Fragment> : ''}
     </p>
     <p>
-      {!loading && !booting && previewRobot &&
+      {!loading && !booting && previewRobot && <>
         <button className='StartButton'
                 onClick={(e) => onStartStage()}>
           Next
-        </button>}
+        </button> &nbsp; </>}
     </p>
   </div>];
 }

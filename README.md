@@ -115,6 +115,7 @@ Optionally, additional robots can be incorporated into various environments:
 * `AIT_ROBOT_0_PREFIX`: (Optional) The prefix for the first sentence for extra robot `#0`, see `AIT_REPLY_PREFIX`.
 * `AIT_ROBOT_0_REPLY_LIMIT`: (Optional) The limit words for extra robot `#0`, default to `AIT_REPLY_LIMIT`.
 * `AIT_ROBOT_0_CHAT_MODEL`: (Optional) The AI chat model for extra robot `#0`, default to `AIT_CHAT_MODEL`.
+* `AIT_ROBOT_0_CHAT_WINDOW`: (Optional) The AI chat window for extra robot `#0`, default to `AIT_CHAT_WINDOW`.
 
 Less frequently used optional environment variables:
 
@@ -164,5 +165,6 @@ The changelog:
 * Add text tips label to use microphone. v1.0.22
 * Refine the startup waiting UI. [v1.0.23](https://github.com/ossrs/ai-talk/releases/tag/v1.0.23)
 * Support setup chat AI model for each robot. v1.0.24
+* Support setup chat window for each robot. v1.0.25
 
 Winlin, 2023.12

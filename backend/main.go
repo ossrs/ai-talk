@@ -58,6 +58,8 @@ type Robot struct {
 	replyLimit int
 	// AI Chat model.
 	chatModel string
+	// AI Chat message window.
+	chatWindow int
 }
 
 // Get the robot by uuid.
@@ -76,8 +78,8 @@ func (v Robot) String() string {
 	if v.prefix != "" {
 		sb.WriteString(fmt.Sprintf(",prefix:%v", v.prefix))
 	}
-	sb.WriteString(fmt.Sprintf(",voice=%v,limit=%v,model=%v,prompt:%v",
-		v.voice, v.replyLimit, v.chatModel, v.prompt))
+	sb.WriteString(fmt.Sprintf(",voice=%v,limit=%v,model=%v,window=%v,prompt:%v",
+		v.voice, v.replyLimit, v.chatModel, v.chatWindow, v.prompt))
 	return sb.String()
 }
 
@@ -1227,10 +1229,17 @@ func doConfig(ctx context.Context) error {
 		return errors.Wrapf(err, "parse AIT_REPLY_LIMIT %v", os.Getenv("AIT_REPLY_LIMIT"))
 	}
 
+	globalChatWindow, err := strconv.ParseInt(os.Getenv("AIT_CHAT_WINDOW"), 10, 64)
+	if err != nil {
+		return errors.Wrapf(err, "parse AIT_CHAT_WINDOW %v", os.Getenv("AIT_CHAT_WINDOW"))
+	}
+
 	if os.Getenv("AIT_DEFAULT_ROBOT") == "true" {
 		robots = append(robots, &Robot{
-			uuid: "default", label: "Default", asrLanguage: os.Getenv("AIT_ASR_LANGUAGE"),
-			replyLimit: int(globalReplylimit), prompt: os.Getenv("AIT_SYSTEM_PROMPT"), voice: "hello-english.aac",
+			uuid: "default", label: "Default", prompt: os.Getenv("AIT_SYSTEM_PROMPT"),
+			asrLanguage: os.Getenv("AIT_ASR_LANGUAGE"), prefix: os.Getenv("AIT_REPLY_PREFIX"),
+			voice: "hello-english.aac", replyLimit: int(globalReplylimit),
+			chatModel: os.Getenv("AIT_CHAT_MODEL"), chatWindow: int(globalChatWindow),
 		})
 	}
 
@@ -1259,13 +1268,24 @@ func doConfig(ctx context.Context) error {
 				chatModel = os.Getenv("AIT_CHAT_MODEL")
 			}
 
+			chatWindow := int(globalChatWindow)
+			if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_WINDOW", i)) != "" {
+				if iv, err := strconv.ParseInt(os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_WINDOW", i)), 10, 64); err != nil {
+					return errors.Wrapf(err, "parse AIT_CHAT_WINDOW %v", os.Getenv("AIT_CHAT_WINDOW"))
+				} else {
+					chatWindow = int(iv)
+				}
+			}
+
+			uuid := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ID", i))
+			label := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i))
+			prompt := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i))
+			prefix := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i))
+			asrLanguage := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i))
+
 			robots = append(robots, &Robot{
-				voice: voice, uuid: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ID", i)),
-				replyLimit: replyLimit, label: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i)),
-				chatModel: chatModel, prompt: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i)),
-				prefix: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i)),
-				// The ASR language for whisper.
-				asrLanguage: os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)),
+				uuid: uuid, label: label, prompt: prompt, asrLanguage: asrLanguage, prefix: prefix,
+				voice: voice, replyLimit: replyLimit, chatModel: chatModel, chatWindow: chatWindow,
 			})
 		}
 	}

@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.css';
-import {useIsOssrsNet} from "./utils";
+import {useIsMobile, useIsOssrsNet} from "./utils";
 import {useDebugPanel} from "./debugPanel";
 import {useRobotInitiator} from "./robotInitiator";
 
@@ -21,6 +21,7 @@ function App() {
 
 function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
   const isOssrsNet = useIsOssrsNet();
+  const isMobile = useIsMobile();
 
   // Whether user is press the microhpone and talking.
   const [talking, setTalking] = React.useState(false);
@@ -235,12 +236,12 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
 
     const handleKeyDown = (e) => {
       if (processing) return;
-      if (e.key !== 'r' && e.key !== '\\') return;
+      if (e.key !== 'r' && e.key !== '\\' && e.key !== ' ') return;
       startRecording();
     };
     const handleKeyUp = (e) => {
       if (processing) return;
-      if (e.key !== 'r' && e.key !== '\\') return;
+      if (e.key !== 'r' && e.key !== '\\' && e.key !== ' ') return;
       stopRecording();
     };
 
@@ -262,7 +263,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
           <div className='mc'></div>
         </div>
         <div className='mc-text'>
-          {!talking ? <span>Press to talk!</span> : <span>&nbsp;</span>}
+          {!talking ? <span>{isMobile ? 'Press to talk!' : 'Press the R key or SPACE to talk!'}</span> : <span>&nbsp;</span>}
         </div>
       </div>}
     </div>

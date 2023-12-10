@@ -40,6 +40,10 @@
   width:20%; height:25%;
 }
 
+.mc-text {
+  text-align: center;
+}
+
 .gn {
   background-color: #787878;
 }

@@ -158,5 +158,6 @@ The changelog:
 * Limit to 30 words and config in robot. v1.0.19
 * Use css to draw a microphone icon. [v1.0.20](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.20)
 * Refine the data loss before and after record. v1.0.21
+* Add text tips label to use microphone. [v1.0.22](https://github.com/winlinvip/ai-talk/releases/tag/v1.0.22)
 
 Winlin, 2023.12

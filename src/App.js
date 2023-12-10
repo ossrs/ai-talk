@@ -22,6 +22,8 @@ function App() {
 function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
   const isOssrsNet = useIsOssrsNet();
 
+  // Whether user is press the microhpone and talking.
+  const [talking, setTalking] = React.useState(false);
   // Whether microphone is really working, when state change to active.
   const [micWorking, setMicWorking] = React.useState(false);
   // Whether AI is processing the user input and generating the response.
@@ -61,6 +63,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     ref.current.isRecording = true;
     ref.current.count += 1;
 
+    setTalking(true);
     verbose("=============");
     info('');
 
@@ -82,7 +85,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
 
     ref.current.mediaRecorder.start();
     verbose(`Event: Recording started`);
-  }, [info, verbose, robotReady, ref, setMicWorking]);
+  }, [info, verbose, robotReady, ref, setMicWorking, setTalking]);
 
   // User click stop button, we delay some time to allow cancel the stopping event.
   const stopRecording = React.useCallback(async () => {
@@ -102,6 +105,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
         ref.current.mediaRecorder.stop();
       });
 
+      setTalking(false);
       setMicWorking(false);
       setProcessing(true);
       verbose(`Event: Recoder stopped, chunks=${ref.current.audioChunks.length}`);
@@ -223,7 +227,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
     }, 500);
-  }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing]);
+  }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing, setTalking, setMicWorking]);
 
   // Setup the keyboard event, for PC browser.
   React.useEffect(() => {
@@ -253,9 +257,14 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
             disabled={!robotReady || processing}>
-      <div className={micWorking ? 'gn-active' : 'gn'}>
-        <div className='mc'></div>
-      </div>
+      {!processing && <div>
+        <div className={micWorking ? 'gn-active' : 'gn'}>
+          <div className='mc'></div>
+        </div>
+        <div className='mc-text'>
+          {!talking ? <span>Press to talk!</span> : <span>&nbsp;</span>}
+        </div>
+      </div>}
     </div>
     {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk" alt=''/>}
   </>;

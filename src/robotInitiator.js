@@ -127,6 +127,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
     const robot = availableRobots.find(robot => robot.uuid === e.target.value);
     setPreviewRobot(robot);
     RobotConfig.save(robot);
+    info(`Change robot to ${robot.label}`);
     verbose(`Change to robot ${robot.label} ${robot.uuid}`);
   }, [info, verbose, availableRobots, setPreviewRobot]);
 

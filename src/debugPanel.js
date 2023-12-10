@@ -15,6 +15,7 @@ export function useDebugPanel(playerRef) {
 
   // Write a summary or info log, which is important but short message for user.
   const info = React.useCallback((msg) => {
+    console.log(`[info] ${buildLog(msg)}`);
     ref.current.infoLogs = [...ref.current.infoLogs, msg];
     setInfoLogs(ref.current.infoLogs);
   }, [ref, setInfoLogs]);
@@ -46,7 +47,7 @@ export function useDebugPanel(playerRef) {
   }, [verbose, playerRef]);
 
   return [info, verbose, showVerboseLogs, <React.Fragment>
-    <div style={{textAlign: 'right', padding: '10px'}}>
+    <div style={{textAlign: 'right'}}>
       <button onClick={(e) => {
         verbose(`Set debugging to ${!showVerboseLogs}`);
         setShowVerboseLogs(!showVerboseLogs);

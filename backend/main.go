@@ -712,8 +712,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	} else {
 		temperature = float32(v)
 	}
-	logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v",
-		robot.uuid, robot.label, model, maxTokens, temperature)
+	logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, histories=%v",
+		robot.uuid, robot.label, model, maxTokens, temperature, len(stage.histories))
 
 	gptChatStream, err := client.CreateChatCompletionStream(
 		ctx, openai.ChatCompletionRequest{

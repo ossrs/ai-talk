@@ -4,6 +4,8 @@ import {useIsMobile, useIsOssrsNet} from "./utils";
 import {useDebugPanel} from "./debugPanel";
 import {useRobotInitiator} from "./robotInitiator";
 
+const timeoutWaitForLastVoice = 700;
+
 function App() {
   // The player ref, to access the audio player.
   const playerRef = React.useRef(null);
@@ -66,7 +68,6 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
 
     setTalking(true);
     verbose("=============");
-    info('');
 
     // The stream is already opened when robot ready, or all answers are played.
     // See https://www.sitelint.com/lab/media-recorder-supported-mime-type/
@@ -99,13 +100,14 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
         ref.current.mediaRecorder.addEventListener("stop", () => {
           const stream = ref.current.mediaRecorder.stream;
           stream.getTracks().forEach(track => track.stop());
-          setTimeout(resolve, 300);
+          setTimeout(resolve, 30);
         });
 
         verbose(`Event: Recorder stop, chunks=${ref.current.audioChunks.length}, state=${ref.current.mediaRecorder.state}`);
         ref.current.mediaRecorder.stop();
       });
 
+      info('');
       setTalking(false);
       setMicWorking(false);
       setProcessing(true);
@@ -227,7 +229,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
-    }, 500);
+    }, timeoutWaitForLastVoice);
   }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing, setTalking, setMicWorking]);
 
   // Setup the keyboard event, for PC browser.
@@ -259,11 +261,11 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
             onTouchEnd={stopRecording}
             disabled={!robotReady || processing}>
       {robotReady && !processing && <div>
-        <div className={micWorking ? 'gn-active' : 'gn'}>
-          <div className='mc'></div>
-        </div>
         <div className='mc-text'>
           {!talking ? <span>{isMobile ? 'Press to talk!' : 'Press the R key or SPACE to talk!'}</span> : <span>&nbsp;</span>}
+        </div>
+        <div className={micWorking ? 'gn-active' : 'gn'}>
+          <div className='mc'></div>
         </div>
       </div>}
     </div>

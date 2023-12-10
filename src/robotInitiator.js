@@ -1,6 +1,9 @@
 import React from "react";
 import {RobotConfig} from "./utils";
 
+const timeoutForMicrophoneTestToRun = 50;
+const timeoutWaitForMicrophoneToClose = 1300;
+
 export function useRobotInitiator(info, verbose, playerRef) {
   // The available robots for user to select.
   const [availableRobots, setAvailableRobots] = React.useState([]);
@@ -52,14 +55,14 @@ export function useRobotInitiator(info, verbose, playerRef) {
           setTimeout(() => {
             verbose(`Start: Microphone test ok.`);
             resolve();
-          }, 600);
+          }, timeoutWaitForMicrophoneToClose);
         });
 
         recorder.start();
         setTimeout(() => {
           recorder.stop();
           verbose(`Start: Microphone stopping, state is ${recorder.state}`);
-        }, 30);
+        }, timeoutForMicrophoneTestToRun);
       }).catch(error => alert(`Open microphone error: ${error}`));
     }).then(() => {
       setBooting(false);
@@ -87,7 +90,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
         const robot = data.data.robots.find(robot => robot.uuid === config.uuid);
         if (robot) {
           setPreviewRobot(robot);
-          info(`Use previous robot ${robot.label}`);
+          info(`Use robot ${robot.label}`);
           verbose(`Use previous robot ${robot.label} ${robot.uuid}`);
         }
       }
@@ -106,7 +109,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
     const listener = () => {
       playerRef.current.removeEventListener('ended', listener);
       setRobotReady(true);
-      info(`Stage started, AI is ready`);
+      info(`Conversation started, AI is ready`);
       verbose(`Stage started, AI is ready, sid=${stageUUID}`);
     };
     playerRef.current.addEventListener('ended', listener);
@@ -117,11 +120,11 @@ export function useRobotInitiator(info, verbose, playerRef) {
 
   // User select a robot.
   const onUserSelectRobot = React.useCallback((e) => {
-    if (!e.target.value) return;
+    if (!e.target.value) return setPreviewRobot(null);
+
     const robot = availableRobots.find(robot => robot.uuid === e.target.value);
     setPreviewRobot(robot);
     RobotConfig.save(robot);
-    info(`Change to robot ${robot.label}`);
     verbose(`Change to robot ${robot.label} ${robot.uuid}`);
   }, [info, verbose, availableRobots, setPreviewRobot]);
 

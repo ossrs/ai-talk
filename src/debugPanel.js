@@ -68,7 +68,7 @@ export function useDebugPanel(playerRef) {
           const bot = log.indexOf('Bot:') === 0;
           const color = you ? 'darkgreen' : (bot ? 'darkblue' : '');
           const fontWeight = you ? 'bold' : 'normal';
-          const msg = log ? log : index === infoLogs.length - 1 ? <div><br/><br/><b>Loading...</b></div> : <br/>;
+          const msg = log ? log : index === infoLogs.length - 1 ? <div><br/><b>Loading...</b></div> : <br/>;
           return (<div key={index} style={{color,fontWeight}}>{msg}</div>);
         })}
       </div>

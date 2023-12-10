@@ -40,6 +40,9 @@ export function useRobotInitiator(info, verbose, playerRef) {
 
         const audioChunks = [];
         recorder.addEventListener("dataavailable", ({data}) => {
+          // When we got data, we can make sure the permission is allowed by user.
+          setAllowed(true);
+
           audioChunks.push(data);
         });
         recorder.addEventListener("stop", async () => {
@@ -49,7 +52,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
           setTimeout(() => {
             verbose(`Start: Microphone test ok.`);
             resolve();
-          }, 50);
+          }, 600);
         });
 
         recorder.start();
@@ -59,7 +62,6 @@ export function useRobotInitiator(info, verbose, playerRef) {
         }, 30);
       }).catch(error => alert(`Open microphone error: ${error}`));
     }).then(() => {
-      setAllowed(true);
       setBooting(false);
     });
   }, [info, verbose, setAllowed, setBooting]);
@@ -140,7 +142,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
       </React.Fragment> : ''}
     </p>
     <p>
-      {!loading && previewRobot &&
+      {!loading && !booting && previewRobot &&
         <button className='StartButton'
                 onClick={(e) => onStartStage()}>
           Next

@@ -32,13 +32,29 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     count: 0,
     isRecording: false,
     stopHandler: null,
+    mediaStream: null,
     mediaRecorder: null,
     audioChunks: [],
   });
 
+  // When robot is ready, open the microphone ASAP to accept user input.
+  React.useEffect(() => {
+    if (!robotReady) return;
+    if (ref.current.mediaStream) return;
+
+    verbose(`Robot is ready, open microphone.`)
+    navigator.mediaDevices.getUserMedia(
+      { audio: true }
+    ).then((stream) => {
+      ref.current.mediaStream = stream;
+      verbose(`Robot is ready, microphone opened.`);
+    }).catch(error => alert(`Device error: ${error}`));
+  }, [robotReady, ref]);
+
   // User start a conversation, by recording input.
   const startRecording = React.useCallback(async () => {
     if (!robotReady) return;
+    if (!ref.current.mediaStream) return;
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     if (ref.current.mediaRecorder) return;
     if (ref.current.isRecording) return;
@@ -48,16 +64,10 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     verbose("=============");
     info('');
 
-    const stream = await new Promise(resolve => {
-      navigator.mediaDevices.getUserMedia(
-        { audio: true }
-      ).then((stream) => {
-        resolve(stream);
-      }).catch(error => alert(`Device error: ${error}`));
-    });
-
+    // The stream is already opened when robot ready, or all answers are played.
     // See https://www.sitelint.com/lab/media-recorder-supported-mime-type/
-    ref.current.mediaRecorder = new MediaRecorder(stream);
+    ref.current.mediaRecorder = new MediaRecorder(ref.current.mediaStream);
+    ref.current.mediaStream = null;
 
     // See https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder#events
     ref.current.mediaRecorder.addEventListener("start", () => {
@@ -188,6 +198,18 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
             }).catch(error => reject(error));
           });
         }
+
+        // Reopen the microphone.
+        verbose(`Robot is ready, open microphone.`)
+        new Promise((resolve, reject) => {
+          navigator.mediaDevices.getUserMedia(
+            { audio: true }
+          ).then((stream) => {
+            ref.current.mediaStream = stream;
+            verbose(`All audios is played, microphone opened.`);
+            resolve();
+          }).catch(error => reject(error));
+        });
       } catch (e) {
         alert(e);
       } finally {
@@ -200,7 +222,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     ref.current.stopHandler = setTimeout(() => {
       stopRecordingImpl();
-    }, 300);
+    }, 500);
   }, [info, verbose, playerRef, stageUUID, robot, robotReady, ref, setProcessing]);
 
   // Setup the keyboard event, for PC browser.

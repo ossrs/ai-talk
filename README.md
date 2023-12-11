@@ -133,10 +133,12 @@ Less frequently used optional environment variables:
 
 ## HTTPS Certificate
 
-You can buy and download HTTPS certificate, then mount to docker by:
+You can buy and download HTTPS certificate, then mount to docker by `-v` as bellow:
 
 ```bash
-docker run -v /path/to/domain.crt:/g/server.crt -v /path/to/domain.key:/g/server.key
+docker run \
+    -v /path/to/domain.crt:/g/server.crt -v /path/to/domain.key:/g/server.key \
+    ossrs/ai-talk:v1
 ```
 
 Please make sure the file `/path/to/domain.crt` and `/path/to/domain.key` exists.
@@ -165,6 +167,6 @@ The changelog:
 * Add text tips label to use microphone. v1.0.22
 * Refine the startup waiting UI. [v1.0.23](https://github.com/ossrs/ai-talk/releases/tag/v1.0.23)
 * Support setup chat AI model for each robot. v1.0.24
-* Support setup chat window for each robot. v1.0.25
+* Support setup chat window for each robot. [v1.0.25](https://github.com/ossrs/ai-talk/releases/tag/v1.0.25)
 
 Winlin, 2023.12

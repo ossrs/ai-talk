@@ -691,7 +691,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	stage.previousAssitant = ""
 
 	system := robot.prompt
-	system += fmt.Sprintf("Keep your reply neat, limiting the reply to %v words.", robot.replyLimit)
+	system += fmt.Sprintf(" Keep your reply neat, limiting the reply to %v words.", robot.replyLimit)
 	logger.Tf(ctx, "AI system prompt: %v", system)
 	messages := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: system},

@@ -24,6 +24,7 @@ function App() {
 function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
   const isOssrsNet = useIsOssrsNet();
   const isMobile = useIsMobile();
+  const [statLink, setStatLink] = React.useState(null);
 
   // Whether user is press the microhpone and talking.
   const [talking, setTalking] = React.useState(false);
@@ -255,6 +256,11 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     };
   }, [robotReady, startRecording, stopRecording, processing]);
 
+  React.useEffect(() => {
+    if (!isOssrsNet) return;
+    setStatLink(`https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk/${robot.uuid}`);
+  }, [isOssrsNet, setStatLink]);
+
   return <>
     <div className="App-header"
             onTouchStart={startRecording}
@@ -269,7 +275,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
         </div>
       </div>}
     </div>
-    {isOssrsNet && <img className='LogGif' src="https://ossrs.net/gif/v1/sls.gif?site=ossrs.net&path=/stat/ai-talk" alt=''/>}
+    {statLink && <img className='LogGif' src={statLink} alt=''/>}
   </>;
 }
 

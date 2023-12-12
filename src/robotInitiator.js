@@ -28,6 +28,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
     const isHttps = window.location.protocol === 'https:';
     const securityAllowed = isLo || isHttps;
     securityAllowed || info(`App started, allowed=${securityAllowed}`);
+    securityAllowed || alert(`HTTPS is required!`);
     verbose(`App started, allowed=${securityAllowed}, lo=${isLo}, https=${isHttps}`);
     if (!securityAllowed) return;
 

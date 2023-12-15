@@ -136,12 +136,11 @@ Optionally, you might need to set the following environment variables:
 
 Optionally, additional robots can be incorporated into various environments:
 
-* `AIT_EXTRA_ROBOTS`: The number of extra robots, default to `0`.
 * `AIT_ROBOT_0_ID`: The id for extra robot `#0`, for example, `english-spoken-coach`.
 * `AIT_ROBOT_0_LABEL`: The label for extra robot `#0`, for example, `English Spoken Coach`.
 * `AIT_ROBOT_0_PROMPT`: The prompt for extra robot `#0`, for example, `I want you to act as a spoken English teacher and improver.`.
 * `AIT_ROBOT_0_ASR_LANGUAGE`: **(Optional)** The language for extra robot `#0`, default to `AIT_ASR_LANGUAGE`.
-* `AIT_ROBOT_0_PREFIX`: **(Optional)** The prefix for the first sentence for extra robot `#0`, default to `AIT_REPLY_PREFIX`.
+* `AIT_ROBOT_0_REPLY_PREFIX`: **(Optional)** The prefix for the first sentence for extra robot `#0`, default to `AIT_REPLY_PREFIX`.
 * `AIT_ROBOT_0_REPLY_LIMIT`: **(Optional)** The limit words for extra robot `#0`, default to `AIT_REPLY_LIMIT`.
 * `AIT_ROBOT_0_CHAT_MODEL`: **(Optional)** The AI chat model for extra robot `#0`, default to `AIT_CHAT_MODEL`.
 * `AIT_ROBOT_0_CHAT_WINDOW`: **(Optional)** The AI chat window for extra robot `#0`, default to `AIT_CHAT_WINDOW`.
@@ -201,5 +200,6 @@ The changelog:
 * Support HTTPS proxy for OpenAI. v1.0.27
 * Support official OpenAI API without proxy. [v1.0.28](https://github.com/ossrs/ai-talk/releases/tag/v1.0.28)
 * Always use HTTPS proxy if not specified. v1.0.29
+* Do not require some variables. v1.0.30
 
 Winlin, 2023.12

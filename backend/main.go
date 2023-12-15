@@ -1192,7 +1192,6 @@ func doConfig(ctx context.Context) error {
 	setEnvDefault("AIT_REPLY_LIMIT", "30")
 	setEnvDefault("AIT_DEVELOPMENT", "true")
 	setEnvDefault("AIT_CHAT_WINDOW", "5")
-	setEnvDefault("AIT_EXTRA_ROBOTS", "0")
 	setEnvDefault("AIT_DEFAULT_ROBOT", "true")
 	setEnvDefault("AIT_STAGE_TIMEOUT", "300")
 	setEnvDefault("AIT_TTS_VOICE", string(openai.VoiceNova))
@@ -1212,13 +1211,13 @@ func doConfig(ctx context.Context) error {
 	logger.Tf(ctx, "OPENAI_API_KEY=%vB, OPENAI_PROXY=%v, AIT_HTTP_LISTEN=%v, AIT_HTTPS_LISTEN=%v, "+
 		"AIT_PROXY_STATIC=%v, AIT_REPLY_PREFIX=%v, AIT_SYSTEM_PROMPT=%v, AIT_CHAT_MODEL=%v, AIT_MAX_TOKENS=%v, "+
 		"AIT_TEMPERATURE=%v, AIT_KEEP_FILES=%v, AIT_ASR_LANGUAGE=%v, AIT_REPLY_LIMIT=%v, AIT_CHAT_WINDOW=%v, "+
-		"AIT_EXTRA_ROBOTS=%v, AIT_DEFAULT_ROBOT=%v, AIT_STAGE_TIMEOUT=%v, AIT_TTS_VOICE=%v, AIT_TTS_MODEL=%v, "+
+		"AIT_DEFAULT_ROBOT=%v, AIT_STAGE_TIMEOUT=%v, AIT_TTS_VOICE=%v, AIT_TTS_MODEL=%v, "+
 		"AIT_ASR_MODEL=%v",
 		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), os.Getenv("AIT_HTTP_LISTEN"),
 		os.Getenv("AIT_HTTPS_LISTEN"), os.Getenv("AIT_PROXY_STATIC"), os.Getenv("AIT_REPLY_PREFIX"),
 		os.Getenv("AIT_SYSTEM_PROMPT"), os.Getenv("AIT_CHAT_MODEL"), os.Getenv("AIT_MAX_TOKENS"),
 		os.Getenv("AIT_TEMPERATURE"), os.Getenv("AIT_KEEP_FILES"), os.Getenv("AIT_ASR_LANGUAGE"),
-		os.Getenv("AIT_REPLY_LIMIT"), os.Getenv("AIT_CHAT_WINDOW"), os.Getenv("AIT_EXTRA_ROBOTS"),
+		os.Getenv("AIT_REPLY_LIMIT"), os.Getenv("AIT_CHAT_WINDOW"),
 		os.Getenv("AIT_DEFAULT_ROBOT"), os.Getenv("AIT_STAGE_TIMEOUT"), os.Getenv("AIT_TTS_VOICE"),
 		os.Getenv("AIT_TTS_MODEL"), os.Getenv("AIT_ASR_MODEL"),
 	)
@@ -1243,52 +1242,55 @@ func doConfig(ctx context.Context) error {
 		})
 	}
 
-	if v, err := strconv.ParseInt(os.Getenv("AIT_EXTRA_ROBOTS"), 10, 64); err != nil {
-		return errors.Wrapf(err, "parse AIT_EXTRA_ROBOTS %v", os.Getenv("AIT_EXTRA_ROBOTS"))
-	} else {
-		for i := 0; i < int(v); i++ {
-			setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i), os.Getenv("AIT_ASR_LANGUAGE"))
-			setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i), os.Getenv("AIT_REPLY_PREFIX"))
-
-			voice := "hello-english.aac"
-			if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)) != "en" {
-				voice = "hello-chinese.aac"
+	for i := 0; i < 100; i++ {
+		uuid := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ID", i))
+		label := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i))
+		prompt := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i))
+		if uuid == "" || label == "" || prompt == "" {
+			if uuid != "" || label != "" || prompt != "" {
+				logger.Wf(ctx, "Ignore uuid=%v, label=%v, prompt=%v", uuid, label, prompt)
 			}
-
-			replyLimit := int(globalReplylimit)
-			if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_LIMIT", i)) != "" {
-				if iv, err := strconv.ParseInt(os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_LIMIT", i)), 10, 64); err != nil {
-					return errors.Wrapf(err, "parse AIT_REPLY_LIMIT %v", os.Getenv("AIT_REPLY_LIMIT"))
-				} else {
-					replyLimit = int(iv)
-				}
-			}
-
-			chatModel := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_MODEL", i))
-			if chatModel == "" {
-				chatModel = os.Getenv("AIT_CHAT_MODEL")
-			}
-
-			chatWindow := int(globalChatWindow)
-			if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_WINDOW", i)) != "" {
-				if iv, err := strconv.ParseInt(os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_WINDOW", i)), 10, 64); err != nil {
-					return errors.Wrapf(err, "parse AIT_CHAT_WINDOW %v", os.Getenv("AIT_CHAT_WINDOW"))
-				} else {
-					chatWindow = int(iv)
-				}
-			}
-
-			uuid := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ID", i))
-			label := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_LABEL", i))
-			prompt := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PROMPT", i))
-			prefix := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i))
-			asrLanguage := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i))
-
-			robots = append(robots, &Robot{
-				uuid: uuid, label: label, prompt: prompt, asrLanguage: asrLanguage, prefix: prefix,
-				voice: voice, replyLimit: replyLimit, chatModel: chatModel, chatWindow: chatWindow,
-			})
+			continue
 		}
+
+		setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i), os.Getenv("AIT_ASR_LANGUAGE"))
+		setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_REPLY_PREFIX", i), os.Getenv("AIT_REPLY_PREFIX"))
+
+		voice := "hello-english.aac"
+		if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)) != "en" {
+			voice = "hello-chinese.aac"
+		}
+
+		replyLimit := int(globalReplylimit)
+		if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_LIMIT", i)) != "" {
+			if iv, err := strconv.ParseInt(os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_LIMIT", i)), 10, 64); err != nil {
+				return errors.Wrapf(err, "parse AIT_REPLY_LIMIT %v", os.Getenv("AIT_REPLY_LIMIT"))
+			} else {
+				replyLimit = int(iv)
+			}
+		}
+
+		chatModel := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_MODEL", i))
+		if chatModel == "" {
+			chatModel = os.Getenv("AIT_CHAT_MODEL")
+		}
+
+		chatWindow := int(globalChatWindow)
+		if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_WINDOW", i)) != "" {
+			if iv, err := strconv.ParseInt(os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_CHAT_WINDOW", i)), 10, 64); err != nil {
+				return errors.Wrapf(err, "parse AIT_CHAT_WINDOW %v", os.Getenv("AIT_CHAT_WINDOW"))
+			} else {
+				chatWindow = int(iv)
+			}
+		}
+
+		prefix := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_REPLY_PREFIX", i))
+		asrLanguage := os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i))
+
+		robots = append(robots, &Robot{
+			uuid: uuid, label: label, prompt: prompt, asrLanguage: asrLanguage, prefix: prefix,
+			voice: voice, replyLimit: replyLimit, chatModel: chatModel, chatWindow: chatWindow,
+		})
 	}
 
 	var sb []string

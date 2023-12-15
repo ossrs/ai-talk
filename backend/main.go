@@ -1247,7 +1247,8 @@ func doConfig(ctx context.Context) error {
 		return errors.Wrapf(err, "parse AIT_EXTRA_ROBOTS %v", os.Getenv("AIT_EXTRA_ROBOTS"))
 	} else {
 		for i := 0; i < int(v); i++ {
-			setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i), "en")
+			setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i), os.Getenv("AIT_ASR_LANGUAGE"))
+			setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_PREFIX", i), os.Getenv("AIT_REPLY_PREFIX"))
 
 			voice := "hello-english.aac"
 			if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)) != "en" {

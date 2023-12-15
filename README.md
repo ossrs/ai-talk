@@ -140,11 +140,11 @@ Optionally, additional robots can be incorporated into various environments:
 * `AIT_ROBOT_0_ID`: The id for extra robot `#0`, for example, `english-spoken-coach`.
 * `AIT_ROBOT_0_LABEL`: The label for extra robot `#0`, for example, `English Spoken Coach`.
 * `AIT_ROBOT_0_PROMPT`: The prompt for extra robot `#0`, for example, `I want you to act as a spoken English teacher and improver.`.
-* `AIT_ROBOT_0_ASR_LANGUAGE`: The language for extra robot `#0`, see `AIT_ASR_LANGUAGE`, default to `en`.
-* `AIT_ROBOT_0_PREFIX`: (Optional) The prefix for the first sentence for extra robot `#0`, see `AIT_REPLY_PREFIX`.
-* `AIT_ROBOT_0_REPLY_LIMIT`: (Optional) The limit words for extra robot `#0`, default to `AIT_REPLY_LIMIT`.
-* `AIT_ROBOT_0_CHAT_MODEL`: (Optional) The AI chat model for extra robot `#0`, default to `AIT_CHAT_MODEL`.
-* `AIT_ROBOT_0_CHAT_WINDOW`: (Optional) The AI chat window for extra robot `#0`, default to `AIT_CHAT_WINDOW`.
+* `AIT_ROBOT_0_ASR_LANGUAGE`: **(Optional)** The language for extra robot `#0`, default to `AIT_ASR_LANGUAGE`.
+* `AIT_ROBOT_0_PREFIX`: **(Optional)** The prefix for the first sentence for extra robot `#0`, default to `AIT_REPLY_PREFIX`.
+* `AIT_ROBOT_0_REPLY_LIMIT`: **(Optional)** The limit words for extra robot `#0`, default to `AIT_REPLY_LIMIT`.
+* `AIT_ROBOT_0_CHAT_MODEL`: **(Optional)** The AI chat model for extra robot `#0`, default to `AIT_CHAT_MODEL`.
+* `AIT_ROBOT_0_CHAT_WINDOW`: **(Optional)** The AI chat window for extra robot `#0`, default to `AIT_CHAT_WINDOW`.
 
 Less frequently used optional environment variables:
 

@@ -1302,7 +1302,7 @@ func doConfig(ctx context.Context) error {
 		if strings.Contains(proxy, "://") {
 			aiConfig.BaseURL = proxy
 		} else if strings.Contains(proxy, "openai.com") {
-			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
+			aiConfig.BaseURL = fmt.Sprintf("https://%v", proxy)
 		} else {
 			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
 		}

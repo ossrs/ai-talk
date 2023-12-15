@@ -198,5 +198,7 @@ The changelog:
 * Support setup chat AI model for each robot. v1.0.24
 * Support setup chat window for each robot. [v1.0.25](https://github.com/ossrs/ai-talk/releases/tag/v1.0.25)
 * Alert error when not HTTPS. v1.0.26
+* Support HTTPS proxy for OpenAI. v1.0.27
+* Support official OpenAI API without proxy. [v1.0.28](https://github.com/ossrs/ai-talk/releases/tag/v1.0.28)
 
 Winlin, 2023.12

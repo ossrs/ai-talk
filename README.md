@@ -73,6 +73,33 @@ Then you can access by https://your-server-ip from your mobile browser.
 
 > Note: The HTTPS certificate is self-signed, you need to accept it in your mobile browser.
 
+## aaPanel or BaoTa
+
+You can use [aaPanel](https://www.aapanel.com/) or [BaoTa](https://www.bt.cn/) to deploy AI-Talk.
+
+First, run AI Talk in docker, only listen at HTTP:
+
+```bash
+docker run --rm -it -p 3000:3000 \
+    -e OPENAI_API_KEY=sk-xxx -e OPENAI_PROXY=api.openai.com \
+    -e AIT_SYSTEM_PROMPT="You are a helpful assistant." \
+    -e AIT_CHAT_MODEL="gpt-4-1106-preview" \
+    ossrs/ai-talk:v1
+```
+
+Then, create a website, with nginx config as bellow:
+
+```nginx
+    location / {
+      proxy_pass http://127.0.0.1:3000$request_uri;
+    }
+    if ($server_port !~ 443){
+        rewrite ^(/.*)$ https://$host$1 permanent;
+    }
+```
+
+Finally, setup HTTPS and access the website by https://your-domain-name.
+
 ## Environment Variables
 
 Necessary environment variables that you must configure:

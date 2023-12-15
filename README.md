@@ -87,7 +87,7 @@ docker run --rm -it -p 3000:3000 \
     ossrs/ai-talk:v1
 ```
 
-Then, create a website, with nginx config as bellow:
+Then, create a website in aaPanel or BaoTa, with nginx config as bellow:
 
 ```nginx
     location / {
@@ -98,7 +98,9 @@ Then, create a website, with nginx config as bellow:
     }
 ```
 
-Finally, setup HTTPS and access the website by https://your-domain-name.
+Next, setup HTTPS by aaPanel or BaoTa.
+
+Finally, access the website by https://your-domain-name.
 
 ## Environment Variables
 

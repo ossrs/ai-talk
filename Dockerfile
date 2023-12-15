@@ -48,6 +48,8 @@ RUN npm i && npm run build
 
 FROM ubuntu:focal as dist
 
+ # lego: For ACME client, request and renew the HTTPS certificate.
+COPY --from=ffmpeg /etc/ssl/certs /etc/ssl/certs
 COPY --from=build /usr/local/bin/ffmpeg /usr/local/bin/
 COPY --from=build /g/backend/*.aac /g/backend/*.mp3 /g/backend/*.opus /g/backend/server /g/backend/
 COPY --from=ui /g/build /g/build

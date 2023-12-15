@@ -1178,7 +1178,7 @@ func doConfig(ctx context.Context) error {
 	}
 
 	setEnvDefault("OPENAI_API_KEY", "")
-	setEnvDefault("OPENAI_PROXY", "api.openai.com")
+	setEnvDefault("OPENAI_PROXY", "https://api.openai.com/v1")
 	setEnvDefault("AIT_HTTP_LISTEN", "3001")
 	setEnvDefault("AIT_HTTPS_LISTEN", "3443")
 	setEnvDefault("AIT_PROXY_STATIC", "true")
@@ -1301,10 +1301,8 @@ func doConfig(ctx context.Context) error {
 	if proxy := os.Getenv("OPENAI_PROXY"); proxy != "" {
 		if strings.Contains(proxy, "://") {
 			aiConfig.BaseURL = proxy
-		} else if strings.Contains(proxy, "openai.com") {
-			aiConfig.BaseURL = fmt.Sprintf("https://%v", proxy)
 		} else {
-			aiConfig.BaseURL = fmt.Sprintf("http://%v", proxy)
+			aiConfig.BaseURL = fmt.Sprintf("https://%v", proxy)
 		}
 
 		if !strings.HasSuffix(aiConfig.BaseURL, "/v1") {

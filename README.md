@@ -57,7 +57,7 @@ To run in docker:
 
 ```bash
 docker run --rm -it -p 80:3000 -p 443:3443 \
-    -e OPENAI_API_KEY=sk-xxx -e OPENAI_PROXY=api.openai.com \
+    -e OPENAI_API_KEY=sk-xxx -e OPENAI_PROXY=https://api.openai.com/v1 \
     -e AIT_SYSTEM_PROMPT="You are a helpful assistant." \
     -e AIT_CHAT_MODEL="gpt-4-1106-preview" \
     ossrs/ai-talk:v1
@@ -81,7 +81,7 @@ First, run AI Talk in docker, only listen at HTTP:
 
 ```bash
 docker run --rm -it -p 3000:3000 \
-    -e OPENAI_API_KEY=sk-xxx -e OPENAI_PROXY=api.openai.com \
+    -e OPENAI_API_KEY=sk-xxx -e OPENAI_PROXY=https://api.openai.com/v1 \
     -e AIT_SYSTEM_PROMPT="You are a helpful assistant." \
     -e AIT_CHAT_MODEL="gpt-4-1106-preview" \
     ossrs/ai-talk:v1
@@ -110,7 +110,7 @@ Necessary environment variables that you must configure:
 
 Optionally, you might need to set the following environment variables:
 
-* `OPENAI_PROXY`: The OpenAI API proxy, default to `api.openai.com`, which directly access OpenAI API without proxy.
+* `OPENAI_PROXY`: The OpenAI API proxy, default to `https://api.openai.com/v1`, which directly access OpenAI API without proxy.
 * `AIT_SYSTEM_PROMPT`: The system prompt, default to `You are a helpful assistant.`.
   * To make sure AI response limit words to avoid long audio, we always append `Keep your reply neat, limiting the reply to ${AIT_REPLY_LIMIT} words.` to system prompt.
   * You can set `AIT_REPLY_LIMIT` to limit the words of AI response, default to `50`.
@@ -200,5 +200,6 @@ The changelog:
 * Alert error when not HTTPS. v1.0.26
 * Support HTTPS proxy for OpenAI. v1.0.27
 * Support official OpenAI API without proxy. [v1.0.28](https://github.com/ossrs/ai-talk/releases/tag/v1.0.28)
+* Always use HTTPS proxy if not specified. v1.0.29
 
 Winlin, 2023.12

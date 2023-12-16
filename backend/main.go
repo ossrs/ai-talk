@@ -660,11 +660,29 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 	logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, prompt=<%v>, resp is <%v>",
 		robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, resp.Text)
-	asrText := resp.Text
-	stage.previousAsrText = resp.Text
+
+	asrText := strings.TrimSpace(resp.Text)
+	stage.previousAsrText = asrText
 
 	logger.Tf(ctx, "You: %v", asrText)
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
+
+	// Detect empty input and filter badcase.
+	if asrText == "" {
+		return errors.Errorf("empty asr")
+	}
+	if robot.asrLanguage == "zh" {
+		if strings.Contains(asrText, "请不吝点赞") ||
+			strings.Contains(asrText, "打赏支持明镜与点点栏目") ||
+			strings.Contains(asrText, "谢谢观看") {
+			return errors.Errorf("badcase: %v", asrText)
+		}
+	}
+	if robot.asrLanguage == "en" {
+		if strings.ToLower(asrText) == "you" {
+			return errors.Errorf("badcase: %v", asrText)
+		}
+	}
 
 	// Keep alive the stage.
 	stage.KeepAlive()
@@ -1157,7 +1175,7 @@ func doMain(ctx context.Context) error {
 		listen = fmt.Sprintf(":%v", listen)
 	}
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("Listen at %v, workDir=%v\n", listen, workDir))
-	logger.Tf(ctx, "Listen at %v", listen)
+	logger.Tf(ctx, "Listen at %v, workDir=%v", listen, workDir)
 	server := &http.Server{Addr: listen, Handler: handler}
 
 	go func() {

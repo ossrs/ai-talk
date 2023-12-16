@@ -5,6 +5,7 @@ import {useDebugPanel} from "./debugPanel";
 import {useRobotInitiator} from "./robotInitiator";
 
 const timeoutWaitForLastVoice = 700;
+const durationRequiredUserInput = 300;
 
 function App() {
   // The player ref, to access the audio player.
@@ -37,6 +38,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
   const ref = React.useRef({
     count: 0,
     isRecording: false,
+    recordStarttime: null,
     stopHandler: null,
     mediaStream: null,
     mediaRecorder: null,
@@ -64,6 +66,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     if (ref.current.stopHandler) clearTimeout(ref.current.stopHandler);
     if (ref.current.mediaRecorder) return;
     if (ref.current.isRecording) return;
+    ref.current.recordStarttime = new Date();
     ref.current.isRecording = true;
     ref.current.count += 1;
 
@@ -94,117 +97,129 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
   const stopRecording = React.useCallback(async () => {
     if (!robotReady) return;
 
-    const stopRecordingImpl = async () => {
-      if (!ref.current.mediaRecorder) return;
+    const processUserInput = async() => {
+      // Upload the user input audio to the server.
+      const requestUUID = await new Promise((resolve, reject) => {
+        verbose(`ASR: Uploading ${ref.current.audioChunks.length} chunks, robot=${robot.uuid}`);
+        const audioBlob = new Blob(ref.current.audioChunks);
+        ref.current.audioChunks = [];
 
-      await new Promise(resolve => {
-        ref.current.mediaRecorder.addEventListener("stop", () => {
-          const stream = ref.current.mediaRecorder.stream;
-          stream.getTracks().forEach(track => track.stop());
-          setTimeout(resolve, 30);
-        });
+        // It can be aac or ogg codec.
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'input.audio');
 
-        verbose(`Event: Recorder stop, chunks=${ref.current.audioChunks.length}, state=${ref.current.mediaRecorder.state}`);
-        ref.current.mediaRecorder.stop();
+        fetch(`/api/ai-talk/upload/?sid=${stageUUID}&robot=${robot.uuid}`, {
+          method: 'POST',
+          body: formData,
+        }).then(response => {
+          return response.json();
+        }).then((data) => {
+          verbose(`ASR: Upload success: ${data.data.rid} ${data.data.asr}`);
+          info(`You: ${data.data.asr}`);
+          resolve(data.data.rid);
+        }).catch((error) => reject(error));
       });
 
-      info(''); // Insert a empty line to show loading of user input.
-      setTalking(false);
-      setMicWorking(false);
-      setProcessing(true);
-      verbose(`Event: Recoder stopped, chunks=${ref.current.audioChunks.length}`);
-
-      try {
-        // Upload the user input audio to the server.
-        const requestUUID = await new Promise((resolve, reject) => {
-          verbose(`ASR: Uploading ${ref.current.audioChunks.length} chunks, robot=${robot.uuid}`);
-          const audioBlob = new Blob(ref.current.audioChunks);
-          ref.current.audioChunks = [];
-
-          // It can be aac or ogg codec.
-          const formData = new FormData();
-          formData.append('file', audioBlob, 'input.audio');
-
-          fetch(`/api/ai-talk/upload/?sid=${stageUUID}&robot=${robot.uuid}`, {
-            method: 'POST',
-            body: formData,
-          }).then(response => {
-            return response.json();
-          }).then((data) => {
-            verbose(`ASR: Upload success: ${data.data.rid} ${data.data.asr}`);
-            info(`You: ${data.data.asr}`);
-            resolve(data.data.rid);
-          }).catch((error) => reject(error));
-        });
-
-        // Get the AI generated audio from the server.
-        while (true) {
-          verbose(`TTS: Requesting ${requestUUID} response audios, rid=${requestUUID}`);
-          let audioSegmentUUID = null;
-          while (!audioSegmentUUID) {
-            const resp = await new Promise((resolve, reject) => {
-              fetch(`/api/ai-talk/query/?sid=${stageUUID}&rid=${requestUUID}`, {
-                method: 'POST',
-              }).then(response => {
-                return response.json();
-              }).then((data) => {
-                if (data?.data?.asid) {
-                  verbose(`TTS: Audio ready: ${data.data.asid} ${data.data.tts}`);
-                  info(`Bot: ${data.data.tts}`);
-                }
-                resolve(data.data);
-              }).catch(error => reject(error));
-            });
-
-            if (!resp.asid) {
-              break;
-            }
-
-            if (resp.processing) {
-              await new Promise((resolve) => setTimeout(resolve, 300));
-              continue;
-            }
-
-            audioSegmentUUID = resp.asid;
-          }
-
-          // All audios are played.
-          if (!audioSegmentUUID) {
-            verbose(`TTS: All audios are played, rid=${requestUUID}`);
-            verbose("=============");
-            break;
-          }
-
-          // Play the AI generated audio.
-          await new Promise(resolve => {
-            const url = `/api/ai-talk/tts/?sid=${stageUUID}&rid=${requestUUID}&asid=${audioSegmentUUID}`;
-            verbose(`TTS: Playing ${url}`);
-
-            const listener = () => {
-              playerRef.current.removeEventListener('ended', listener);
-              verbose(`TTS: Played ${url} done.`);
-              resolve();
-            };
-            playerRef.current.addEventListener('ended', listener);
-
-            playerRef.current.src = url;
-            playerRef.current.play().catch(error => {
-              verbose(`TTS: Play ${url} failed: ${error}`);
-              resolve();
-            });
-          });
-
-          // Remove the AI generated audio.
-          await new Promise((resolve, reject) => {
-            fetch(`/api/ai-talk/remove/?sid=${stageUUID}&rid=${requestUUID}&asid=${audioSegmentUUID}`, {
+      // Get the AI generated audio from the server.
+      while (true) {
+        verbose(`TTS: Requesting ${requestUUID} response audios, rid=${requestUUID}`);
+        let audioSegmentUUID = null;
+        while (!audioSegmentUUID) {
+          const resp = await new Promise((resolve, reject) => {
+            fetch(`/api/ai-talk/query/?sid=${stageUUID}&rid=${requestUUID}`, {
               method: 'POST',
             }).then(response => {
               return response.json();
             }).then((data) => {
-              verbose(`TTS: Audio removed: ${audioSegmentUUID}`);
-              resolve();
+              if (data?.data?.asid) {
+                verbose(`TTS: Audio ready: ${data.data.asid} ${data.data.tts}`);
+                info(`Bot: ${data.data.tts}`);
+              }
+              resolve(data.data);
             }).catch(error => reject(error));
           });
+
+          if (!resp.asid) {
+            break;
+          }
+
+          if (resp.processing) {
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            continue;
+          }
+
+          audioSegmentUUID = resp.asid;
+        }
+
+        // All audios are played.
+        if (!audioSegmentUUID) {
+          verbose(`TTS: All audios are played, rid=${requestUUID}`);
+          verbose("=============");
+          break;
+        }
+
+        // Play the AI generated audio.
+        await new Promise(resolve => {
+          const url = `/api/ai-talk/tts/?sid=${stageUUID}&rid=${requestUUID}&asid=${audioSegmentUUID}`;
+          verbose(`TTS: Playing ${url}`);
+
+          const listener = () => {
+            playerRef.current.removeEventListener('ended', listener);
+            verbose(`TTS: Played ${url} done.`);
+            resolve();
+          };
+          playerRef.current.addEventListener('ended', listener);
+
+          playerRef.current.src = url;
+          playerRef.current.play().catch(error => {
+            verbose(`TTS: Play ${url} failed: ${error}`);
+            resolve();
+          });
+        });
+
+        // Remove the AI generated audio.
+        await new Promise((resolve, reject) => {
+          fetch(`/api/ai-talk/remove/?sid=${stageUUID}&rid=${requestUUID}&asid=${audioSegmentUUID}`, {
+            method: 'POST',
+          }).then(response => {
+            return response.json();
+          }).then((data) => {
+            verbose(`TTS: Audio removed: ${audioSegmentUUID}`);
+            resolve();
+          }).catch(error => reject(error));
+        });
+      }
+    };
+
+    const stopRecordingImpl = async () => {
+      if (!ref.current.mediaRecorder) return;
+
+      try {
+        const userMayInput = new Date() - ref.current.recordStarttime - timeoutWaitForLastVoice;
+        verbose(`Event: User stop record, duration=${userMayInput}ms, state=${ref.current.mediaRecorder.state}`);
+
+        await new Promise(resolve => {
+          ref.current.mediaRecorder.addEventListener("stop", () => {
+            const stream = ref.current.mediaRecorder.stream;
+            stream.getTracks().forEach(track => track.stop());
+            setTimeout(resolve, 30);
+          });
+
+          verbose(`Event: Recorder stop, chunks=${ref.current.audioChunks.length}, state=${ref.current.mediaRecorder.state}`);
+          ref.current.mediaRecorder.stop();
+        });
+
+        info(''); // Insert a empty line to show loading of user input.
+        setTalking(false);
+        setMicWorking(false);
+        setProcessing(true);
+        verbose(`Event: Recoder stopped, chunks=${ref.current.audioChunks.length}`);
+
+        if (userMayInput < durationRequiredUserInput) {
+          info(`Warning: You didn't say anything!`);
+          alert(`You didn't say anything!`);
+        } else {
+          await processUserInput();
         }
 
         // Reopen the microphone.

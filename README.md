@@ -202,5 +202,6 @@ The changelog:
 * Always use HTTPS proxy if not specified. v1.0.29
 * Do not require some variables. v1.0.30
 * Refine the logs for user and bot. v1.0.31
+* Detect user silent and warning. [v1.0.32](https://github.com/ossrs/ai-talk/releases/tag/v1.0.32)
 
 Winlin, 2023.12

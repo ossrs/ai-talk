@@ -566,7 +566,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 
 	// The stage uuid, user must create it before upload question audio.
-	sid := r.URL.Query().Get("sid")
+	q := r.URL.Query()
+	sid := q.Get("sid")
 	if sid == "" {
 		return errors.Errorf("empty sid")
 	}
@@ -584,7 +585,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	// Handle request and log with error.
 	if err := func() error {
 		// Get the robot to talk with.
-		robotUUID := r.URL.Query().Get("robot")
+		robotUUID := q.Get("robot")
 		if robotUUID == "" {
 			return errors.Errorf("empty robot")
 		}
@@ -598,8 +599,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		rid := uuid.NewString()
 		inputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.audio", rid))
 		outputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.m4a", rid))
-		logger.Tf(ctx, "Stage: Got question sid=%v, robot=%v(%v), rid=%v, input=%v, output=%v",
-			sid, robot.uuid, robot.label, rid, inputFile, outputFile)
+		logger.Tf(ctx, "Stage: Got question sid=%v, umi=%v, robot=%v(%v), rid=%v, input=%v, output=%v",
+			sid, q.Get("umi"), robot.uuid, robot.label, rid, inputFile, outputFile)
 
 		// We save the input audio to *.audio file, it can be aac or opus codec.
 		if os.Getenv("AIT_KEEP_FILES") != "true" {
@@ -795,7 +796,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 // When user query the question state, which is identified by rid (request id).
 func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	// The stage uuid, user must create it before upload question audio.
-	sid := r.URL.Query().Get("sid")
+	q := r.URL.Query()
+	sid := q.Get("sid")
 	if sid == "" {
 		return errors.Errorf("empty sid")
 	}
@@ -813,7 +815,7 @@ func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *htt
 	// Handle request and log with error.
 	if err := func() error {
 		// The rid is the request id, which identify this request, generally a question.
-		rid := r.URL.Query().Get("rid")
+		rid := q.Get("rid")
 		if rid == "" {
 			return errors.Errorf("empty rid")
 		}
@@ -854,7 +856,8 @@ func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *htt
 // When user download the answer tts, which is identified by rid (request id) and aid (answer id)
 func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	// The stage uuid, user must create it before upload question audio.
-	sid := r.URL.Query().Get("sid")
+	q := r.URL.Query()
+	sid := q.Get("sid")
 	if sid == "" {
 		return errors.Errorf("empty sid")
 	}
@@ -872,12 +875,12 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 	// Handle request and log with error.
 	if err := func() error {
 		// The rid is the request id, which identify this request, generally a question.
-		rid := r.URL.Query().Get("rid")
+		rid := q.Get("rid")
 		if rid == "" {
 			return errors.Errorf("empty rid")
 		}
 
-		asid := r.URL.Query().Get("asid")
+		asid := q.Get("asid")
 		if asid == "" {
 			return errors.Errorf("empty asid")
 		}
@@ -913,7 +916,8 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 // When user remove the answer tts, which is identified by rid (request id) and aid (answer id)
 func handleRemoveAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	// The stage uuid, user must create it before upload question audio.
-	sid := r.URL.Query().Get("sid")
+	q := r.URL.Query()
+	sid := q.Get("sid")
 	if sid == "" {
 		return errors.Errorf("empty sid")
 	}
@@ -930,12 +934,12 @@ func handleRemoveAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	// Handle request and log with error.
 	if err := func() error {
-		rid := r.URL.Query().Get("rid")
+		rid := q.Get("rid")
 		if rid == "" {
 			return errors.Errorf("empty rid")
 		}
 
-		asid := r.URL.Query().Get("asid")
+		asid := q.Get("asid")
 		if asid == "" {
 			return errors.Errorf("empty asid")
 		}
@@ -972,7 +976,8 @@ func handleStaticFiles(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	}
 
 	// If there is an optional stage id, we will use the logging context of stage.
-	if sid := r.URL.Query().Get("sid"); sid != "" {
+	q := r.URL.Query()
+	if sid := q.Get("sid"); sid != "" {
 		if stage := talkServer.QueryStage(sid); stage != nil {
 			ctx = stage.loggingCtx
 		}

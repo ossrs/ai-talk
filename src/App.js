@@ -97,7 +97,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
   const stopRecording = React.useCallback(async () => {
     if (!robotReady) return;
 
-    const processUserInput = async() => {
+    const processUserInput = async(userMayInput) => {
       // Upload the user input audio to the server.
       const requestUUID = await new Promise((resolve, reject) => {
         verbose(`ASR: Uploading ${ref.current.audioChunks.length} chunks, robot=${robot.uuid}`);
@@ -108,7 +108,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
         const formData = new FormData();
         formData.append('file', audioBlob, 'input.audio');
 
-        fetch(`/api/ai-talk/upload/?sid=${stageUUID}&robot=${robot.uuid}`, {
+        fetch(`/api/ai-talk/upload/?sid=${stageUUID}&robot=${robot.uuid}&umi=${userMayInput}`, {
           method: 'POST',
           body: formData,
         }).then(response => {
@@ -220,7 +220,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
           alert(`Warning: You didn't say anything!`);
         } else {
           try {
-            await processUserInput();
+            await processUserInput(userMayInput);
           } catch (e) {
             info(`System: Server error ${e}`);
             info(`System: Please try again.`);

@@ -158,6 +158,8 @@ type AnswerSegment struct {
 	dummy bool
 	// Signal to remove the TTS file immediately.
 	removeSignal chan bool
+	// Whether we have logged this segment.
+	logged bool
 }
 
 func NewAnswerSegment(opts ...func(segment *AnswerSegment)) *AnswerSegment {
@@ -664,8 +666,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	asrText := strings.TrimSpace(resp.Text)
 	stage.previousAsrText = asrText
 
+	// Important trace log.
 	logger.Tf(ctx, "You: %v", asrText)
-	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
 
 	// Detect empty input and filter badcase.
 	if asrText == "" {
@@ -871,8 +873,12 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 	logger.Tf(ctx, "Query segment %v %v, dummy=%v, segment=%v, err=%v",
 		rid, asid, segment.dummy, segment.text, segment.err)
 
-	logger.Tf(ctx, "Bot: %v", segment.text)
-	fmt.Fprintf(os.Stderr, "Bot: %v\n", segment.text)
+	// Important trace log. Note that browser may request multiple times, so we only log for the first
+	// request to reduce logs.
+	if !segment.logged {
+		segment.logged = true
+		logger.Tf(ctx, "Bot: %v", segment.text)
+	}
 
 	// Read the ttsFile and response it as opus audio.
 	w.Header().Set("Content-Type", "audio/aac")
@@ -1174,7 +1180,6 @@ func doMain(ctx context.Context) error {
 	if !strings.HasPrefix(listen, ":") {
 		listen = fmt.Sprintf(":%v", listen)
 	}
-	fmt.Fprintf(os.Stderr, fmt.Sprintf("Listen at %v, workDir=%v\n", listen, workDir))
 	logger.Tf(ctx, "Listen at %v, workDir=%v", listen, workDir)
 	server := &http.Server{Addr: listen, Handler: handler}
 

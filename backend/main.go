@@ -662,6 +662,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, resp.Text)
 	asrText := resp.Text
 	stage.previousAsrText = resp.Text
+
+	logger.Tf(ctx, "You: %v", asrText)
 	fmt.Fprintf(os.Stderr, fmt.Sprintf("You: %v\n", asrText))
 
 	// Keep alive the stage.
@@ -851,6 +853,7 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 	logger.Tf(ctx, "Query segment %v %v, dummy=%v, segment=%v, err=%v",
 		rid, asid, segment.dummy, segment.text, segment.err)
 
+	logger.Tf(ctx, "Bot: %v", segment.text)
 	fmt.Fprintf(os.Stderr, "Bot: %v\n", segment.text)
 
 	// Read the ttsFile and response it as opus audio.

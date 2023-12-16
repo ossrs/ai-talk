@@ -201,5 +201,6 @@ The changelog:
 * Support official OpenAI API without proxy. [v1.0.28](https://github.com/ossrs/ai-talk/releases/tag/v1.0.28)
 * Always use HTTPS proxy if not specified. v1.0.29
 * Do not require some variables. v1.0.30
+* Refine the logs for user and bot. v1.0.31
 
 Winlin, 2023.12

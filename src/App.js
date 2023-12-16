@@ -5,7 +5,7 @@ import {useDebugPanel} from "./debugPanel";
 import {useRobotInitiator} from "./robotInitiator";
 
 const timeoutWaitForLastVoice = 700;
-const durationRequiredUserInput = 300;
+const durationRequiredUserInput = 600;
 
 function App() {
   // The player ref, to access the audio player.
@@ -216,10 +216,16 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
         verbose(`Event: Recoder stopped, chunks=${ref.current.audioChunks.length}`);
 
         if (userMayInput < durationRequiredUserInput) {
-          info(`Warning: You didn't say anything!`);
-          alert(`You didn't say anything!`);
+          info(`System: You didn't say anything!`);
+          alert(`Warning: You didn't say anything!`);
         } else {
-          await processUserInput();
+          try {
+            await processUserInput();
+          } catch (e) {
+            info(`System: Server error ${e}`);
+            info(`System: Please try again.`);
+            alert(`System: Server error ${e}`);
+          }
         }
 
         // Reopen the microphone.

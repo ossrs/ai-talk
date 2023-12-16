@@ -581,207 +581,214 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	// Switch to the context of stage.
 	ctx = stage.loggingCtx
 
-	// Get the robot to talk with.
-	robotUUID := r.URL.Query().Get("robot")
-	if robotUUID == "" {
-		return errors.Errorf("empty robot")
-	}
-
-	robot := GetRobot(robotUUID)
-	if robot == nil {
-		return errors.Errorf("invalid robot %v", robotUUID)
-	}
-
-	// The rid is the request id, which identify this request, generally a question.
-	rid := uuid.NewString()
-	inputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.audio", rid))
-	outputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.m4a", rid))
-	logger.Tf(ctx, "Stage: Got question sid=%v, robot=%v(%v), rid=%v, input=%v, output=%v",
-		sid, robot.uuid, robot.label, rid, inputFile, outputFile)
-
-	// We save the input audio to *.audio file, it can be aac or opus codec.
-	if os.Getenv("AIT_KEEP_FILES") != "true" {
-		defer os.Remove(inputFile)
-	}
+	// Handle request and log with error.
 	if err := func() error {
-		r.ParseMultipartForm(20 * 1024 * 1024)
-		file, _, err := r.FormFile("file")
+		// Get the robot to talk with.
+		robotUUID := r.URL.Query().Get("robot")
+		if robotUUID == "" {
+			return errors.Errorf("empty robot")
+		}
+
+		robot := GetRobot(robotUUID)
+		if robot == nil {
+			return errors.Errorf("invalid robot %v", robotUUID)
+		}
+
+		// The rid is the request id, which identify this request, generally a question.
+		rid := uuid.NewString()
+		inputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.audio", rid))
+		outputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.m4a", rid))
+		logger.Tf(ctx, "Stage: Got question sid=%v, robot=%v(%v), rid=%v, input=%v, output=%v",
+			sid, robot.uuid, robot.label, rid, inputFile, outputFile)
+
+		// We save the input audio to *.audio file, it can be aac or opus codec.
+		if os.Getenv("AIT_KEEP_FILES") != "true" {
+			defer os.Remove(inputFile)
+		}
+		if err := func() error {
+			r.ParseMultipartForm(20 * 1024 * 1024)
+			file, _, err := r.FormFile("file")
+			if err != nil {
+				return errors.Errorf("Error retrieving the file")
+			}
+			defer file.Close()
+
+			out, err := os.Create(inputFile)
+			if err != nil {
+				return errors.Errorf("Unable to create the file for writing")
+			}
+			defer out.Close()
+
+			nn, err := io.Copy(out, file)
+			if err != nil {
+				return errors.Errorf("Error writing the file")
+			}
+			logger.Tf(ctx, "File saved to %v, size: %v", inputFile, nn)
+
+			return nil
+		}(); err != nil {
+			return errors.Wrapf(err, "copy %v", inputFile)
+		}
+
+		// Transcode input audio in opus or aac, to aac in m4a format.
+		if os.Getenv("AIT_KEEP_FILES") != "true" {
+			defer os.Remove(outputFile)
+		}
+		if true {
+			err := exec.CommandContext(ctx, "ffmpeg",
+				"-i", inputFile,
+				"-vn", "-c:a", "aac", "-ac", "1", "-ar", "16000", "-ab", "50k",
+				outputFile,
+			).Run()
+
+			if err != nil {
+				return errors.Errorf("Error converting the file")
+			}
+			logger.Tf(ctx, "Convert to ogg %v ok", outputFile)
+		}
+
+		// Do ASR, convert to text.
+		client := openai.NewClientWithConfig(aiConfig)
+		resp, err := client.CreateTranscription(
+			ctx,
+			openai.AudioRequest{
+				Model:    os.Getenv("AIT_ASR_MODEL"),
+				FilePath: outputFile,
+				Format:   openai.AudioResponseFormatJSON,
+				Language: robot.asrLanguage,
+				Prompt:   stage.previousAsrText,
+			},
+		)
 		if err != nil {
-			return errors.Errorf("Error retrieving the file")
+			return errors.Wrapf(err, "transcription")
 		}
-		defer file.Close()
+		logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, prompt=<%v>, resp is <%v>",
+			robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, resp.Text)
 
-		out, err := os.Create(inputFile)
-		if err != nil {
-			return errors.Errorf("Unable to create the file for writing")
+		asrText := strings.TrimSpace(resp.Text)
+		stage.previousAsrText = asrText
+
+		// Important trace log.
+		logger.Tf(ctx, "You: %v", asrText)
+
+		// Detect empty input and filter badcase.
+		if asrText == "" {
+			return errors.Errorf("empty asr")
 		}
-		defer out.Close()
-
-		nn, err := io.Copy(out, file)
-		if err != nil {
-			return errors.Errorf("Error writing the file")
-		}
-		logger.Tf(ctx, "File saved to %v, size: %v", inputFile, nn)
-
-		return nil
-	}(); err != nil {
-		return errors.Wrapf(err, "copy %v", inputFile)
-	}
-
-	// Transcode input audio in opus or aac, to aac in m4a format.
-	if os.Getenv("AIT_KEEP_FILES") != "true" {
-		defer os.Remove(outputFile)
-	}
-	if true {
-		err := exec.CommandContext(ctx, "ffmpeg",
-			"-i", inputFile,
-			"-vn", "-c:a", "aac", "-ac", "1", "-ar", "16000", "-ab", "50k",
-			outputFile,
-		).Run()
-
-		if err != nil {
-			return errors.Errorf("Error converting the file")
-		}
-		logger.Tf(ctx, "Convert to ogg %v ok", outputFile)
-	}
-
-	// Do ASR, convert to text.
-	client := openai.NewClientWithConfig(aiConfig)
-	resp, err := client.CreateTranscription(
-		ctx,
-		openai.AudioRequest{
-			Model:    os.Getenv("AIT_ASR_MODEL"),
-			FilePath: outputFile,
-			Format:   openai.AudioResponseFormatJSON,
-			Language: robot.asrLanguage,
-			Prompt:   stage.previousAsrText,
-		},
-	)
-	if err != nil {
-		return errors.Wrapf(err, "transcription")
-	}
-	logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, prompt=<%v>, resp is <%v>",
-		robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, resp.Text)
-
-	asrText := strings.TrimSpace(resp.Text)
-	stage.previousAsrText = asrText
-
-	// Important trace log.
-	logger.Tf(ctx, "You: %v", asrText)
-
-	// Detect empty input and filter badcase.
-	if asrText == "" {
-		return errors.Errorf("empty asr")
-	}
-	if robot.asrLanguage == "zh" {
-		if strings.Contains(asrText, "请不吝点赞") ||
-			strings.Contains(asrText, "支持明镜与点点栏目") ||
-			strings.Contains(asrText, "谢谢观看") ||
-			strings.Contains(asrText, "請不吝點贊") ||
-			strings.Contains(asrText, "支持明鏡與點點欄目") {
-			return errors.Errorf("badcase: %v", asrText)
-		}
-	}
-	if robot.asrLanguage == "en" {
-		if strings.ToLower(asrText) == "you" {
-			return errors.Errorf("badcase: %v", asrText)
-		}
-	}
-
-	// Keep alive the stage.
-	stage.KeepAlive()
-
-	// Do chat, get the response in stream.
-	if stage.previousUser != "" && stage.previousAssitant != "" {
-		stage.histories = append(stage.histories, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleUser,
-			Content: stage.previousUser,
-		}, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleAssistant,
-			Content: stage.previousAssitant,
-		})
-
-		if v, err := strconv.ParseInt(os.Getenv("AIT_CHAT_WINDOW"), 10, 64); err != nil {
-			return errors.Wrapf(err, "parse AIT_CHAT_WINDOW %v", os.Getenv("AIT_CHAT_WINDOW"))
-		} else {
-			window := int(v)
-			for len(stage.histories) > window*2 {
-				stage.histories = stage.histories[1:]
+		if robot.asrLanguage == "zh" {
+			if strings.Contains(asrText, "请不吝点赞") ||
+				strings.Contains(asrText, "支持明镜与点点栏目") ||
+				strings.Contains(asrText, "谢谢观看") ||
+				strings.Contains(asrText, "請不吝點贊") ||
+				strings.Contains(asrText, "支持明鏡與點點欄目") {
+				return errors.Errorf("badcase: %v", asrText)
 			}
 		}
-	}
-
-	stage.previousUser = stage.previousAsrText
-	stage.previousAssitant = ""
-
-	system := robot.prompt
-	system += fmt.Sprintf(" Keep your reply neat, limiting the reply to %v words.", robot.replyLimit)
-	logger.Tf(ctx, "AI system prompt: %v", system)
-	messages := []openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleSystem, Content: system},
-	}
-
-	messages = append(messages, stage.histories...)
-	messages = append(messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
-		Content: stage.previousAsrText,
-	})
-
-	model := robot.chatModel
-	var maxTokens int
-	if v, err := strconv.ParseInt(os.Getenv("AIT_MAX_TOKENS"), 10, 64); err != nil {
-		return errors.Wrapf(err, "parse AIT_MAX_TOKENS %v", os.Getenv("AIT_MAX_TOKENS"))
-	} else {
-		maxTokens = int(v)
-	}
-
-	var temperature float32
-	if v, err := strconv.ParseFloat(os.Getenv("AIT_TEMPERATURE"), 64); err != nil {
-		return errors.Wrapf(err, "parse AIT_TEMPERATURE %v", os.Getenv("AIT_TEMPERATURE"))
-	} else {
-		temperature = float32(v)
-	}
-	logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, histories=%v",
-		robot.uuid, robot.label, model, maxTokens, temperature, len(stage.histories))
-
-	gptChatStream, err := client.CreateChatCompletionStream(
-		ctx, openai.ChatCompletionRequest{
-			Model:       model,
-			Messages:    messages,
-			Stream:      true,
-			Temperature: temperature,
-			MaxTokens:   maxTokens,
-		},
-	)
-	if err != nil {
-		return errors.Wrapf(err, "create chat")
-	}
-
-	// Keep alive the stage.
-	stage.KeepAlive()
-
-	// Insert a dummy sentence to identify the request is alive.
-	stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
-		segment.rid = rid
-		segment.dummy = true
-	}))
-
-	// Never wait for any response.
-	go func() {
-		defer gptChatStream.Close()
-		if err := handleChatResponseStream(ctx, stage, robot, rid, gptChatStream); err != nil {
-			logger.Ef(ctx, "Handle stream failed, err %+v", err)
+		if robot.asrLanguage == "en" {
+			if strings.ToLower(asrText) == "you" {
+				return errors.Errorf("badcase: %v", asrText)
+			}
 		}
-	}()
 
-	// Response the request UUID and pulling the response.
-	ohttp.WriteData(ctx, w, r, struct {
-		RequestUUID string `json:"rid"`
-		ASR         string `json:"asr"`
-	}{
-		RequestUUID: rid,
-		ASR:         asrText,
-	})
+		// Keep alive the stage.
+		stage.KeepAlive()
+
+		// Do chat, get the response in stream.
+		if stage.previousUser != "" && stage.previousAssitant != "" {
+			stage.histories = append(stage.histories, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: stage.previousUser,
+			}, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleAssistant,
+				Content: stage.previousAssitant,
+			})
+
+			if v, err := strconv.ParseInt(os.Getenv("AIT_CHAT_WINDOW"), 10, 64); err != nil {
+				return errors.Wrapf(err, "parse AIT_CHAT_WINDOW %v", os.Getenv("AIT_CHAT_WINDOW"))
+			} else {
+				window := int(v)
+				for len(stage.histories) > window*2 {
+					stage.histories = stage.histories[1:]
+				}
+			}
+		}
+
+		stage.previousUser = stage.previousAsrText
+		stage.previousAssitant = ""
+
+		system := robot.prompt
+		system += fmt.Sprintf(" Keep your reply neat, limiting the reply to %v words.", robot.replyLimit)
+		logger.Tf(ctx, "AI system prompt: %v", system)
+		messages := []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleSystem, Content: system},
+		}
+
+		messages = append(messages, stage.histories...)
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleUser,
+			Content: stage.previousAsrText,
+		})
+
+		model := robot.chatModel
+		var maxTokens int
+		if v, err := strconv.ParseInt(os.Getenv("AIT_MAX_TOKENS"), 10, 64); err != nil {
+			return errors.Wrapf(err, "parse AIT_MAX_TOKENS %v", os.Getenv("AIT_MAX_TOKENS"))
+		} else {
+			maxTokens = int(v)
+		}
+
+		var temperature float32
+		if v, err := strconv.ParseFloat(os.Getenv("AIT_TEMPERATURE"), 64); err != nil {
+			return errors.Wrapf(err, "parse AIT_TEMPERATURE %v", os.Getenv("AIT_TEMPERATURE"))
+		} else {
+			temperature = float32(v)
+		}
+		logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, histories=%v",
+			robot.uuid, robot.label, model, maxTokens, temperature, len(stage.histories))
+
+		gptChatStream, err := client.CreateChatCompletionStream(
+			ctx, openai.ChatCompletionRequest{
+				Model:       model,
+				Messages:    messages,
+				Stream:      true,
+				Temperature: temperature,
+				MaxTokens:   maxTokens,
+			},
+		)
+		if err != nil {
+			return errors.Wrapf(err, "create chat")
+		}
+
+		// Keep alive the stage.
+		stage.KeepAlive()
+
+		// Insert a dummy sentence to identify the request is alive.
+		stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
+			segment.rid = rid
+			segment.dummy = true
+		}))
+
+		// Never wait for any response.
+		go func() {
+			defer gptChatStream.Close()
+			if err := handleChatResponseStream(ctx, stage, robot, rid, gptChatStream); err != nil {
+				logger.Ef(ctx, "Handle stream failed, err %+v", err)
+			}
+		}()
+
+		// Response the request UUID and pulling the response.
+		ohttp.WriteData(ctx, w, r, struct {
+			RequestUUID string `json:"rid"`
+			ASR         string `json:"asr"`
+		}{
+			RequestUUID: rid,
+			ASR:         asrText,
+		})
+		return nil
+	}(); err != nil {
+		logger.Wf(ctx, "Stage: Upload err %v", err.Error())
+		return err
+	}
 	return nil
 }
 
@@ -803,37 +810,44 @@ func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *htt
 	// Switch to the context of stage.
 	ctx = stage.loggingCtx
 
-	// The rid is the request id, which identify this request, generally a question.
-	rid := r.URL.Query().Get("rid")
-	if rid == "" {
-		return errors.Errorf("empty rid")
-	}
-	logger.Tf(ctx, "Stage: Query sid=%v, rid=%v", sid, rid)
+	// Handle request and log with error.
+	if err := func() error {
+		// The rid is the request id, which identify this request, generally a question.
+		rid := r.URL.Query().Get("rid")
+		if rid == "" {
+			return errors.Errorf("empty rid")
+		}
+		logger.Tf(ctx, "Stage: Query sid=%v, rid=%v", sid, rid)
 
-	segment := stage.ttsWorker.QueryAnyReadySegment(ctx, stage, rid)
-	if segment == nil {
-		logger.Tf(ctx, "TTS: No segment for sid=%v, rid=%v", sid, rid)
+		segment := stage.ttsWorker.QueryAnyReadySegment(ctx, stage, rid)
+		if segment == nil {
+			logger.Tf(ctx, "TTS: No segment for sid=%v, rid=%v", sid, rid)
+			ohttp.WriteData(ctx, w, r, struct {
+				AnswerSegmentUUID string `json:"asid"`
+			}{})
+			return nil
+		}
+
 		ohttp.WriteData(ctx, w, r, struct {
+			// Whether is processing.
+			Processing bool `json:"processing"`
+			// The UUID for this answer segment.
 			AnswerSegmentUUID string `json:"asid"`
-		}{})
+			// The TTS text.
+			TTS string `json:"tts"`
+		}{
+			// Whether is processing.
+			Processing: segment.dummy || (!segment.ready && segment.err == nil),
+			// The UUID for this answer segment.
+			AnswerSegmentUUID: segment.asid,
+			// The TTS text.
+			TTS: segment.text,
+		})
 		return nil
+	}(); err != nil {
+		logger.Wf(ctx, "Stage: Query err %v", err.Error())
+		return err
 	}
-
-	ohttp.WriteData(ctx, w, r, struct {
-		// Whether is processing.
-		Processing bool `json:"processing"`
-		// The UUID for this answer segment.
-		AnswerSegmentUUID string `json:"asid"`
-		// The TTS text.
-		TTS string `json:"tts"`
-	}{
-		// Whether is processing.
-		Processing: segment.dummy || (!segment.ready && segment.err == nil),
-		// The UUID for this answer segment.
-		AnswerSegmentUUID: segment.asid,
-		// The TTS text.
-		TTS: segment.text,
-	})
 	return nil
 }
 
@@ -855,37 +869,44 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 	// Switch to the context of stage.
 	ctx = stage.loggingCtx
 
-	// The rid is the request id, which identify this request, generally a question.
-	rid := r.URL.Query().Get("rid")
-	if rid == "" {
-		return errors.Errorf("empty rid")
+	// Handle request and log with error.
+	if err := func() error {
+		// The rid is the request id, which identify this request, generally a question.
+		rid := r.URL.Query().Get("rid")
+		if rid == "" {
+			return errors.Errorf("empty rid")
+		}
+
+		asid := r.URL.Query().Get("asid")
+		if asid == "" {
+			return errors.Errorf("empty asid")
+		}
+		logger.Tf(ctx, "Stage: Download sid=%v, rid=%v, asid=%v", sid, rid, asid)
+
+		// Get the segment and response it.
+		segment := stage.ttsWorker.QuerySegment(rid, asid)
+		if segment == nil {
+			return errors.Errorf("no segment for %v %v", rid, asid)
+		}
+		logger.Tf(ctx, "Query segment %v %v, dummy=%v, segment=%v, err=%v",
+			rid, asid, segment.dummy, segment.text, segment.err)
+
+		// Important trace log. Note that browser may request multiple times, so we only log for the first
+		// request to reduce logs.
+		if !segment.logged {
+			segment.logged = true
+			logger.Tf(ctx, "Bot: %v", segment.text)
+		}
+
+		// Read the ttsFile and response it as opus audio.
+		w.Header().Set("Content-Type", "audio/aac")
+		http.ServeFile(w, r, segment.ttsFile)
+
+		return nil
+	}(); err != nil {
+		logger.Wf(ctx, "Stage: Query err %v", err.Error())
+		return err
 	}
-
-	asid := r.URL.Query().Get("asid")
-	if asid == "" {
-		return errors.Errorf("empty asid")
-	}
-	logger.Tf(ctx, "Stage: Download sid=%v, rid=%v, asid=%v", sid, rid, asid)
-
-	// Get the segment and response it.
-	segment := stage.ttsWorker.QuerySegment(rid, asid)
-	if segment == nil {
-		return errors.Errorf("no segment for %v %v", rid, asid)
-	}
-	logger.Tf(ctx, "Query segment %v %v, dummy=%v, segment=%v, err=%v",
-		rid, asid, segment.dummy, segment.text, segment.err)
-
-	// Important trace log. Note that browser may request multiple times, so we only log for the first
-	// request to reduce logs.
-	if !segment.logged {
-		segment.logged = true
-		logger.Tf(ctx, "Bot: %v", segment.text)
-	}
-
-	// Read the ttsFile and response it as opus audio.
-	w.Header().Set("Content-Type", "audio/aac")
-	http.ServeFile(w, r, segment.ttsFile)
-
 	return nil
 }
 
@@ -907,32 +928,39 @@ func handleRemoveAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.R
 	// Switch to the context of stage.
 	ctx = stage.loggingCtx
 
-	rid := r.URL.Query().Get("rid")
-	if rid == "" {
-		return errors.Errorf("empty rid")
+	// Handle request and log with error.
+	if err := func() error {
+		rid := r.URL.Query().Get("rid")
+		if rid == "" {
+			return errors.Errorf("empty rid")
+		}
+
+		asid := r.URL.Query().Get("asid")
+		if asid == "" {
+			return errors.Errorf("empty asid")
+		}
+		logger.Tf(ctx, "Stage: Remove sid=%v, rid=%v, asid=%v", sid, rid, asid)
+
+		// Notify to remove the segment.
+		segment := stage.ttsWorker.QuerySegment(rid, asid)
+		if segment == nil {
+			return errors.Errorf("no segment for %v %v", rid, asid)
+		}
+
+		// Remove it.
+		stage.ttsWorker.RemoveSegment(asid)
+
+		select {
+		case <-ctx.Done():
+		case segment.removeSignal <- true:
+		}
+
+		ohttp.WriteData(ctx, w, r, nil)
+		return nil
+	}(); err != nil {
+		logger.Wf(ctx, "Stage: Query err %v", err.Error())
+		return err
 	}
-
-	asid := r.URL.Query().Get("asid")
-	if asid == "" {
-		return errors.Errorf("empty asid")
-	}
-	logger.Tf(ctx, "Stage: Remove sid=%v, rid=%v, asid=%v", sid, rid, asid)
-
-	// Notify to remove the segment.
-	segment := stage.ttsWorker.QuerySegment(rid, asid)
-	if segment == nil {
-		return errors.Errorf("no segment for %v %v", rid, asid)
-	}
-
-	// Remove it.
-	stage.ttsWorker.RemoveSegment(asid)
-
-	select {
-	case <-ctx.Done():
-	case segment.removeSignal <- true:
-	}
-
-	ohttp.WriteData(ctx, w, r, nil)
 	return nil
 }
 

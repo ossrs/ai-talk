@@ -684,9 +684,12 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 				strings.Contains(asrText, "支持明鏡與點點欄目") {
 				return errors.Errorf("badcase: %v", asrText)
 			}
-		}
-		if robot.asrLanguage == "en" {
-			if strings.ToLower(asrText) == "you" {
+			if strings.Contains(asrText, "字幕由") && strings.Contains(asrText, "社群提供") {
+				return errors.Errorf("badcase: %v", asrText)
+			}
+		} else if robot.asrLanguage == "en" {
+			if strings.ToLower(asrText) == "you" ||
+				strings.Count(asrText, ".") == len(asrText) {
 				return errors.Errorf("badcase: %v", asrText)
 			}
 		}

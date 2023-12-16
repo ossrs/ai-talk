@@ -205,5 +205,6 @@ The changelog:
 * Detect user silent and warning. v1.0.32
 * Refine bot log for the first time. [v1.0.33](https://github.com/ossrs/ai-talk/releases/tag/v1.0.33)
 * Allow user retry when error. v1.0.34
+* Refine badcase for user input. v1.0.35
 
 Winlin, 2023.12

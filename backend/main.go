@@ -675,8 +675,10 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 	if robot.asrLanguage == "zh" {
 		if strings.Contains(asrText, "请不吝点赞") ||
-			strings.Contains(asrText, "打赏支持明镜与点点栏目") ||
-			strings.Contains(asrText, "谢谢观看") {
+			strings.Contains(asrText, "支持明镜与点点栏目") ||
+			strings.Contains(asrText, "谢谢观看") ||
+			strings.Contains(asrText, "請不吝點贊") ||
+			strings.Contains(asrText, "支持明鏡與點點欄目") {
 			return errors.Errorf("badcase: %v", asrText)
 		}
 	}

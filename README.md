@@ -206,5 +206,6 @@ The changelog:
 * Refine bot log for the first time. [v1.0.33](https://github.com/ossrs/ai-talk/releases/tag/v1.0.33)
 * Allow user retry when error. v1.0.34
 * Refine badcase for user input. v1.0.35
+* Fix bug for setting window for robot. [v1.0.36](https://github.com/ossrs/ai-talk/releases/tag/v1.0.36)
 
 Winlin, 2023.12

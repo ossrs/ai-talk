@@ -707,13 +707,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 				Content: stage.previousAssitant,
 			})
 
-			if v, err := strconv.ParseInt(os.Getenv("AIT_CHAT_WINDOW"), 10, 64); err != nil {
-				return errors.Wrapf(err, "parse AIT_CHAT_WINDOW %v", os.Getenv("AIT_CHAT_WINDOW"))
-			} else {
-				window := int(v)
-				for len(stage.histories) > window*2 {
-					stage.histories = stage.histories[1:]
-				}
+			for len(stage.histories) > robot.chatWindow*2 {
+				stage.histories = stage.histories[1:]
 			}
 		}
 
@@ -747,8 +742,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		} else {
 			temperature = float32(v)
 		}
-		logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, histories=%v",
-			robot.uuid, robot.label, model, maxTokens, temperature, len(stage.histories))
+		logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, window=%v, histories=%v",
+			robot.uuid, robot.label, model, maxTokens, temperature, robot.chatWindow, len(stage.histories))
 
 		gptChatStream, err := client.CreateChatCompletionStream(
 			ctx, openai.ChatCompletionRequest{

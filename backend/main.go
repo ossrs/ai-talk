@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	errors_std "errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -23,7 +22,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path"
 	"strconv"
@@ -31,14 +29,21 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unicode"
-	"unicode/utf8"
 )
 
 var talkServer *TalkServer
-var aiConfig openai.ClientConfig
 var workDir string
 var robots []*Robot
+var asrService ASRService
+var ttsService TTSService
+
+type ASRService interface {
+	RequestASR(ctx context.Context, filepath, language, prompt string) (string, error)
+}
+
+type TTSService interface {
+	RequestTTS(ctx context.Context, buildFilepath func(ext string) string, text string) (string, error)
+}
 
 // The Robot is a robot that user can talk with.
 type Robot struct {
@@ -357,35 +362,17 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, stage *Stage, segment *An
 	go func() {
 		defer v.wg.Done()
 
-		if err := func() error {
-			client := openai.NewClientWithConfig(aiConfig)
-			resp, err := client.CreateSpeech(ctx, openai.CreateSpeechRequest{
-				Model:          openai.SpeechModel(os.Getenv("AIT_TTS_MODEL")),
-				Input:          segment.text,
-				Voice:          openai.SpeechVoice(os.Getenv("AIT_TTS_VOICE")),
-				ResponseFormat: openai.SpeechResponseFormatAac,
-			})
-			if err != nil {
-				return errors.Wrapf(err, "create speech")
-			}
-			defer resp.Close()
-
-			out, err := os.Create(segment.ttsFile)
-			if err != nil {
-				return errors.Errorf("Unable to create the file %v for writing", segment.ttsFile)
-			}
-			defer out.Close()
-
-			nn, err := io.Copy(out, resp)
-			if err != nil {
-				return errors.Errorf("Error writing the file")
-			}
-
-			segment.ready = true
-			logger.Tf(ctx, "File saved to %v, size: %v, %v", segment.ttsFile, nn, segment.text)
-			return nil
-		}(); err != nil {
+		ttsService := openaiTTSService{}
+		if ttsFile, err := ttsService.RequestTTS(ctx, func(ext string) string {
+			return path.Join(workDir,
+				fmt.Sprintf("assistant-%v-sentence-%v-tts.%v", segment.rid, segment.asid, ext),
+			)
+		}, segment.text); err != nil {
 			segment.err = err
+		} else {
+			segment.ttsFile = ttsFile
+			segment.ready = true
+			logger.Tf(ctx, "File saved to %v, %v", segment.ttsFile, segment.text)
 		}
 
 		// Start a goroutine to remove the sentence.
@@ -465,109 +452,6 @@ func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Reques
 
 // When user ask a question, which is a request with audio, which is identified by rid (request id).
 func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	handleChatResponseStream := func(ctx context.Context, stage *Stage, robot *Robot, rid string, gptChatStream *openai.ChatCompletionStream) error {
-		stage.generating = true
-		defer func() {
-			stage.generating = false
-		}()
-
-		var sentence string
-		var finished bool
-		firstSentense := true
-		for !finished && ctx.Err() == nil {
-			response, err := gptChatStream.Recv()
-			finished = errors_std.Is(err, io.EOF)
-			if err != nil && !finished {
-				return errors.Wrapf(err, "recv chat")
-			}
-
-			newSentence := false
-			if len(response.Choices) > 0 {
-				choice := response.Choices[0]
-				if dc := choice.Delta.Content; dc != "" {
-					filteredStencese := strings.ReplaceAll(dc, "\n\n", "\n")
-					filteredStencese = strings.ReplaceAll(filteredStencese, "\n", " ")
-					sentence += filteredStencese
-
-					// Any ASCII character to split sentence.
-					if strings.ContainsAny(dc, ",.?!\n") {
-						newSentence = true
-					}
-
-					// Any Chinese character to split sentence.
-					if strings.ContainsRune(dc, '。') ||
-						strings.ContainsRune(dc, '？') ||
-						strings.ContainsRune(dc, '！') {
-						newSentence = true
-					}
-				}
-			}
-
-			if sentence == "" {
-				continue
-			}
-
-			isEnglish := func(s string) bool {
-				for _, r := range s {
-					if r > unicode.MaxASCII {
-						return false
-					}
-				}
-				return true
-			}
-
-			// Determine whether new sentence by length.
-			if isEnglish(sentence) {
-				maxWords, minWords := 30, 3
-				if !firstSentense {
-					maxWords, minWords = 50, 10
-				}
-
-				if nn := strings.Count(sentence, " "); nn >= maxWords {
-					newSentence = true
-				} else if nn < minWords {
-					newSentence = false
-				}
-			} else {
-				maxWords, minWords := 50, 3
-				if !firstSentense {
-					maxWords, minWords = 100, 10
-				}
-
-				if nn := utf8.RuneCount([]byte(sentence)); nn >= maxWords {
-					newSentence = true
-				} else if nn < minWords {
-					newSentence = false
-				}
-			}
-
-			if finished || newSentence {
-				stage.previousAssitant += sentence + " "
-				// We utilize user ASR and AI responses as prompts for the subsequent ASR, given that this is
-				// a chat-based scenario where the user converses with the AI, and the following audio should pertain to both user and AI text.
-				stage.previousAsrText += " " + sentence
-
-				if firstSentense {
-					firstSentense = false
-					if robot.prefix != "" {
-						sentence = fmt.Sprintf("%v %v", robot.prefix, sentence)
-					}
-				}
-
-				stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
-					segment.rid = rid
-					segment.text = sentence
-					segment.ttsFile = path.Join(workDir,
-						fmt.Sprintf("assistant-%v-sentence-%v-tts.aac", rid, segment.asid),
-					)
-				}))
-				sentence = ""
-			}
-		}
-
-		return nil
-	}
-
 	// The stage uuid, user must create it before upload question audio.
 	q := r.URL.Query()
 	sid := q.Get("sid")
@@ -601,9 +485,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		// The rid is the request id, which identify this request, generally a question.
 		rid := uuid.NewString()
 		inputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.audio", rid))
-		outputFile := path.Join(workDir, fmt.Sprintf("assistant-%v-input.m4a", rid))
-		logger.Tf(ctx, "Stage: Got question sid=%v, umi=%v, robot=%v(%v), rid=%v, input=%v, output=%v",
-			sid, q.Get("umi"), robot.uuid, robot.label, rid, inputFile, outputFile)
+		logger.Tf(ctx, "Stage: Got question sid=%v, umi=%v, robot=%v(%v), rid=%v, input=%v",
+			sid, q.Get("umi"), robot.uuid, robot.label, rid, inputFile)
 
 		// We save the input audio to *.audio file, it can be aac or opus codec.
 		if os.Getenv("AIT_KEEP_FILES") != "true" {
@@ -634,43 +517,16 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 			return errors.Wrapf(err, "copy %v", inputFile)
 		}
 
-		// Transcode input audio in opus or aac, to aac in m4a format.
-		if os.Getenv("AIT_KEEP_FILES") != "true" {
-			defer os.Remove(outputFile)
-		}
-		if true {
-			err := exec.CommandContext(ctx, "ffmpeg",
-				"-i", inputFile,
-				"-vn", "-c:a", "aac", "-ac", "1", "-ar", "16000", "-ab", "50k",
-				outputFile,
-			).Run()
-
-			if err != nil {
-				return errors.Errorf("Error converting the file")
-			}
-			logger.Tf(ctx, "Convert to ogg %v ok", outputFile)
-		}
-
 		// Do ASR, convert to text.
-		client := openai.NewClientWithConfig(aiConfig)
-		resp, err := client.CreateTranscription(
-			ctx,
-			openai.AudioRequest{
-				Model:    os.Getenv("AIT_ASR_MODEL"),
-				FilePath: outputFile,
-				Format:   openai.AudioResponseFormatJSON,
-				Language: robot.asrLanguage,
-				Prompt:   stage.previousAsrText,
-			},
-		)
-		if err != nil {
+		var asrText string
+		if respText, err := asrService.RequestASR(ctx, inputFile, robot.asrLanguage, stage.previousAsrText); err != nil {
 			return errors.Wrapf(err, "transcription")
+		} else {
+			asrText = strings.TrimSpace(respText)
+			stage.previousAsrText = asrText
 		}
 		logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, prompt=<%v>, resp is <%v>",
-			robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, resp.Text)
-
-		asrText := strings.TrimSpace(resp.Text)
-		stage.previousAsrText = asrText
+			robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, asrText)
 
 		// Important trace log.
 		logger.Tf(ctx, "You: %v", asrText)
@@ -700,83 +556,17 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		// Keep alive the stage.
 		stage.KeepAlive()
 
-		// Do chat, get the response in stream.
-		if stage.previousUser != "" && stage.previousAssitant != "" {
-			stage.histories = append(stage.histories, openai.ChatCompletionMessage{
-				Role:    openai.ChatMessageRoleUser,
-				Content: stage.previousUser,
-			}, openai.ChatCompletionMessage{
-				Role:    openai.ChatMessageRoleAssistant,
-				Content: stage.previousAssitant,
-			})
-
-			for len(stage.histories) > robot.chatWindow*2 {
-				stage.histories = stage.histories[1:]
-			}
-		}
-
-		stage.previousUser = stage.previousAsrText
-		stage.previousAssitant = ""
-
-		system := robot.prompt
-		system += fmt.Sprintf(" Keep your reply neat, limiting the reply to %v words.", robot.replyLimit)
-		logger.Tf(ctx, "AI system prompt: %v", system)
-		messages := []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleSystem, Content: system},
-		}
-
-		messages = append(messages, stage.histories...)
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleUser,
-			Content: stage.previousAsrText,
-		})
-
-		model := robot.chatModel
-		var maxTokens int
-		if v, err := strconv.ParseInt(os.Getenv("AIT_MAX_TOKENS"), 10, 64); err != nil {
-			return errors.Wrapf(err, "parse AIT_MAX_TOKENS %v", os.Getenv("AIT_MAX_TOKENS"))
-		} else {
-			maxTokens = int(v)
-		}
-
-		var temperature float32
-		if v, err := strconv.ParseFloat(os.Getenv("AIT_TEMPERATURE"), 64); err != nil {
-			return errors.Wrapf(err, "parse AIT_TEMPERATURE %v", os.Getenv("AIT_TEMPERATURE"))
-		} else {
-			temperature = float32(v)
-		}
-		logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, window=%v, histories=%v",
-			robot.uuid, robot.label, model, maxTokens, temperature, robot.chatWindow, len(stage.histories))
-
-		gptChatStream, err := client.CreateChatCompletionStream(
-			ctx, openai.ChatCompletionRequest{
-				Model:       model,
-				Messages:    messages,
-				Stream:      true,
-				Temperature: temperature,
-				MaxTokens:   maxTokens,
-			},
-		)
-		if err != nil {
-			return errors.Wrapf(err, "create chat")
-		}
-
-		// Keep alive the stage.
-		stage.KeepAlive()
-
 		// Insert a dummy sentence to identify the request is alive.
 		stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
 			segment.rid = rid
 			segment.dummy = true
 		}))
 
-		// Never wait for any response.
-		go func() {
-			defer gptChatStream.Close()
-			if err := handleChatResponseStream(ctx, stage, robot, rid, gptChatStream); err != nil {
-				logger.Ef(ctx, "Handle stream failed, err %+v", err)
-			}
-		}()
+		// Do chat, get the response in stream.
+		chatService := &openaiChatService{}
+		if err := chatService.RequestChat(ctx, rid, stage, robot); err != nil {
+			return errors.Wrapf(err, "chat")
+		}
 
 		// Response the request UUID and pulling the response.
 		ohttp.WriteData(ctx, w, r, struct {
@@ -996,6 +786,10 @@ func handleStaticFiles(ctx context.Context, w http.ResponseWriter, r *http.Reque
 func doMain(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Create services.
+	asrService = NewOpenAIASRService()
+	ttsService = NewOpenAITTSService()
 
 	if err := doConfig(ctx); err != nil {
 		return errors.Wrapf(err, "config")
@@ -1362,20 +1156,7 @@ func doConfig(ctx context.Context) error {
 	logger.Tf(ctx, "Robots: total=%v, %v", len(robots), strings.Join(sb, ", "))
 
 	// Initialize OpenAI client config.
-	aiConfig = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
-	if proxy := os.Getenv("OPENAI_PROXY"); proxy != "" {
-		if strings.Contains(proxy, "://") {
-			aiConfig.BaseURL = proxy
-		} else {
-			aiConfig.BaseURL = fmt.Sprintf("https://%v", proxy)
-		}
-
-		if !strings.HasSuffix(aiConfig.BaseURL, "/v1") {
-			aiConfig.BaseURL = fmt.Sprintf("%v/v1", aiConfig.BaseURL)
-		}
-	}
-	logger.Tf(ctx, "OpenAI key(OPENAI_API_KEY): %vB, proxy(OPENAI_PROXY): %v, base url: %v",
-		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), aiConfig.BaseURL)
+	openaiInit(ctx)
 
 	return nil
 }

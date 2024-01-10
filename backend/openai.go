@@ -81,6 +81,7 @@ func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, 
 }
 
 type openaiChatService struct {
+	onFirstResponse func(ctx context.Context)
 }
 
 func (v *openaiChatService) RequestChat(ctx context.Context, rid string, stage *Stage, robot *Robot) error {
@@ -238,16 +239,21 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 			// a chat-based scenario where the user converses with the AI, and the following audio should pertain to both user and AI text.
 			stage.previousAsrText += " " + sentence
 
+			isFirstSentence := firstSentense
 			if firstSentense {
 				firstSentense = false
 				if robot.prefix != "" {
 					sentence = fmt.Sprintf("%v %v", robot.prefix, sentence)
+				}
+				if v.onFirstResponse != nil {
+					v.onFirstResponse(ctx)
 				}
 			}
 
 			stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
 				segment.rid = rid
 				segment.text = sentence
+				segment.first = isFirstSentence
 			}))
 			sentence = ""
 		}
@@ -263,7 +269,7 @@ func NewOpenAITTSService() TTSService {
 	return &openaiTTSService{}
 }
 
-func (v *openaiTTSService) RequestTTS(ctx context.Context, buildFilepath func(ext string) string, text string) (string, error) {
+func (v *openaiTTSService) RequestTTS(ctx context.Context, buildFilepath func(ext string) string, text string) error {
 	ttsFile := buildFilepath("aac")
 
 	client := openai.NewClientWithConfig(aiConfig)
@@ -274,19 +280,19 @@ func (v *openaiTTSService) RequestTTS(ctx context.Context, buildFilepath func(ex
 		ResponseFormat: openai.SpeechResponseFormatAac,
 	})
 	if err != nil {
-		return "", errors.Wrapf(err, "create speech")
+		return errors.Wrapf(err, "create speech")
 	}
 	defer resp.Close()
 
 	out, err := os.Create(ttsFile)
 	if err != nil {
-		return "", errors.Errorf("Unable to create the file %v for writing", ttsFile)
+		return errors.Errorf("Unable to create the file %v for writing", ttsFile)
 	}
 	defer out.Close()
 
 	if _, err = io.Copy(out, resp); err != nil {
-		return "", errors.Errorf("Error writing the file")
+		return errors.Errorf("Error writing the file")
 	}
 
-	return ttsFile, nil
+	return nil
 }

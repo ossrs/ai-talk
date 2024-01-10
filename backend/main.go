@@ -42,7 +42,7 @@ type ASRService interface {
 }
 
 type TTSService interface {
-	RequestTTS(ctx context.Context, buildFilepath func(ext string) string, text string) (string, error)
+	RequestTTS(ctx context.Context, buildFilepath func(ext string) string, text string) error
 }
 
 // The Robot is a robot that user can talk with.
@@ -107,6 +107,19 @@ type Stage struct {
 	histories []openai.ChatCompletionMessage
 	// Whether the stage is generating more sentences.
 	generating bool
+
+	// For time cost statistic.
+	lastSentence time.Time
+	// The time for last upload audio.
+	lastUploadAudio time.Time
+	// The time for last request ASR result.
+	lastRequestASR time.Time
+	// The time for last request Chat result, the first segment.
+	lastRequestChat time.Time
+	// The time for last request TTS result, the first segment.
+	lastRequestTTS time.Time
+	// The time for last download the TTS result, the first segment.
+	lastDownloadAudio time.Time
 }
 
 func NewStage(opts ...func(*Stage)) *Stage {
@@ -145,6 +158,48 @@ func (v *Stage) KeepAlive() {
 	v.update = time.Now()
 }
 
+func (v *Stage) total() float64 {
+	if v.lastDownloadAudio.After(v.lastSentence) {
+		return float64(v.lastDownloadAudio.Sub(v.lastSentence)) / float64(time.Second)
+	}
+	return 0
+}
+
+func (v *Stage) upload() float64 {
+	if v.lastUploadAudio.After(v.lastSentence) {
+		return float64(v.lastUploadAudio.Sub(v.lastSentence)) / float64(time.Second)
+	}
+	return 0
+}
+
+func (v *Stage) asr() float64 {
+	if v.lastRequestASR.After(v.lastUploadAudio) {
+		return float64(v.lastRequestASR.Sub(v.lastUploadAudio)) / float64(time.Second)
+	}
+	return 0
+}
+
+func (v *Stage) chat() float64 {
+	if v.lastRequestChat.After(v.lastRequestASR) {
+		return float64(v.lastRequestChat.Sub(v.lastRequestASR)) / float64(time.Second)
+	}
+	return 0
+}
+
+func (v *Stage) tts() float64 {
+	if v.lastRequestTTS.After(v.lastRequestChat) {
+		return float64(v.lastRequestTTS.Sub(v.lastRequestChat)) / float64(time.Second)
+	}
+	return 0
+}
+
+func (v *Stage) download() float64 {
+	if v.lastDownloadAudio.After(v.lastRequestTTS) {
+		return float64(v.lastDownloadAudio.Sub(v.lastRequestTTS)) / float64(time.Second)
+	}
+	return 0
+}
+
 // The AnswerSegment is a segment of answer, which is a sentence.
 type AnswerSegment struct {
 	// Request UUID.
@@ -165,6 +220,8 @@ type AnswerSegment struct {
 	removeSignal chan bool
 	// Whether we have logged this segment.
 	logged bool
+	// Whether the segment is the first response.
+	first bool
 }
 
 func NewAnswerSegment(opts ...func(segment *AnswerSegment)) *AnswerSegment {
@@ -363,15 +420,18 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, stage *Stage, segment *An
 		defer v.wg.Done()
 
 		ttsService := openaiTTSService{}
-		if ttsFile, err := ttsService.RequestTTS(ctx, func(ext string) string {
-			return path.Join(workDir,
+		if err := ttsService.RequestTTS(ctx, func(ext string) string {
+			segment.ttsFile = path.Join(workDir,
 				fmt.Sprintf("assistant-%v-sentence-%v-tts.%v", segment.rid, segment.asid, ext),
 			)
+			return segment.ttsFile
 		}, segment.text); err != nil {
 			segment.err = err
 		} else {
-			segment.ttsFile = ttsFile
 			segment.ready = true
+			if segment.first {
+				stage.lastRequestTTS = time.Now()
+			}
 			logger.Tf(ctx, "File saved to %v, %v", segment.ttsFile, segment.text)
 		}
 
@@ -466,6 +526,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 	// Keep alive the stage.
 	stage.KeepAlive()
+	stage.lastSentence = time.Now()
 	// Switch to the context of stage.
 	ctx = stage.loggingCtx
 
@@ -516,6 +577,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		}(); err != nil {
 			return errors.Wrapf(err, "copy %v", inputFile)
 		}
+		stage.lastUploadAudio = time.Now()
 
 		// Do ASR, convert to text.
 		var asrText string
@@ -524,6 +586,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		} else {
 			asrText = strings.TrimSpace(respText)
 			stage.previousAsrText = asrText
+			stage.lastRequestASR = time.Now()
 		}
 		logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, prompt=<%v>, resp is <%v>",
 			robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, asrText)
@@ -563,7 +626,11 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		}))
 
 		// Do chat, get the response in stream.
-		chatService := &openaiChatService{}
+		chatService := &openaiChatService{
+			onFirstResponse: func(ctx context.Context) {
+				stage.lastRequestChat = time.Now()
+			},
+		}
 		if err := chatService.RequestChat(ctx, rid, stage, robot); err != nil {
 			return errors.Wrapf(err, "chat")
 		}
@@ -684,6 +751,12 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 		}
 		logger.Tf(ctx, "Query segment %v %v, dummy=%v, segment=%v, err=%v",
 			rid, asid, segment.dummy, segment.text, segment.err)
+
+		if !segment.logged && segment.first {
+			stage.lastDownloadAudio = time.Now()
+			logger.Tf(ctx, "Report cost total=%.1fs, upload=%.1fs, asr=%.1fs, chat=%.1fs, tts=%.1fs, download=%.1fs",
+				stage.total(), stage.upload(), stage.asr(), stage.chat(), stage.tts(), stage.download())
+		}
 
 		// Important trace log. Note that browser may request multiple times, so we only log for the first
 		// request to reduce logs.

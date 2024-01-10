@@ -419,7 +419,6 @@ func (v *TTSWorker) SubmitSegment(ctx context.Context, stage *Stage, segment *An
 	go func() {
 		defer v.wg.Done()
 
-		ttsService := openaiTTSService{}
 		if err := ttsService.RequestTTS(ctx, func(ext string) string {
 			segment.ttsFile = path.Join(workDir,
 				fmt.Sprintf("assistant-%v-sentence-%v-tts.%v", segment.rid, segment.asid, ext),
@@ -766,7 +765,11 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 		}
 
 		// Read the ttsFile and response it as opus audio.
-		w.Header().Set("Content-Type", "audio/aac")
+		if strings.HasSuffix(segment.ttsFile, ".wav") {
+			w.Header().Set("Content-Type", "audio/wav")
+		} else {
+			w.Header().Set("Content-Type", "audio/aac")
+		}
 		http.ServeFile(w, r, segment.ttsFile)
 
 		return nil
@@ -860,12 +863,19 @@ func doMain(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Create services.
-	asrService = NewOpenAIASRService()
-	ttsService = NewOpenAITTSService()
-
 	if err := doConfig(ctx); err != nil {
 		return errors.Wrapf(err, "config")
+	}
+
+	// Create services.
+	if os.Getenv("TENCENT_SPEECH_APPID") != "" {
+		asrService = NewTencentASRService()
+		ttsService = NewTencentTTSService()
+		logger.Tf(ctx, "Use Tencent ASR and TTS.")
+	} else {
+		asrService = NewOpenAIASRService()
+		ttsService = NewOpenAITTSService()
+		logger.Tf(ctx, "Use OpenAI ASR and TTS.")
 	}
 
 	// Create the talk server.
@@ -1230,6 +1240,7 @@ func doConfig(ctx context.Context) error {
 
 	// Initialize OpenAI client config.
 	openaiInit(ctx)
+	tencentInit(ctx)
 
 	return nil
 }

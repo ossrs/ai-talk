@@ -219,7 +219,8 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 				// Any Chinese character to split sentence.
 				if strings.ContainsRune(dc, '。') ||
 					strings.ContainsRune(dc, '？') ||
-					strings.ContainsRune(dc, '！') {
+					strings.ContainsRune(dc, '！') ||
+					strings.ContainsRune(dc, '，') {
 					newSentence = true
 				}
 			}

@@ -16,23 +16,53 @@ import (
 	"unicode/utf8"
 )
 
-var aiConfig openai.ClientConfig
+var asrAIConfig openai.ClientConfig
+var chatAIConfig openai.ClientConfig
+var ttsAIConfig openai.ClientConfig
 
 func openaiInit(ctx context.Context) {
-	aiConfig = openai.DefaultConfig(os.Getenv("OPENAI_API_KEY"))
-	if proxy := os.Getenv("OPENAI_PROXY"); proxy != "" {
+	filterProxyUrl := func(proxy string) string {
+		var baseURL string
 		if strings.Contains(proxy, "://") {
-			aiConfig.BaseURL = proxy
+			baseURL = proxy
 		} else {
-			aiConfig.BaseURL = fmt.Sprintf("https://%v", proxy)
+			baseURL = fmt.Sprintf("https://%v", proxy)
 		}
 
-		if !strings.HasSuffix(aiConfig.BaseURL, "/v1") {
-			aiConfig.BaseURL = fmt.Sprintf("%v/v1", aiConfig.BaseURL)
+		if !strings.HasSuffix(baseURL, "/v1") {
+			baseURL = fmt.Sprintf("%v/v1", baseURL)
 		}
+		return baseURL
 	}
-	logger.Tf(ctx, "OpenAI key(OPENAI_API_KEY): %vB, proxy(OPENAI_PROXY): %v, base url: %v",
-		len(os.Getenv("OPENAI_API_KEY")), os.Getenv("OPENAI_PROXY"), aiConfig.BaseURL)
+	getFirstEnv := func(envNames ...string) string {
+		for _, envName := range envNames {
+			if v := os.Getenv(envName); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+
+	asrAPIKey := getFirstEnv("ASR_OPENAI_API_KEY", "OPENAI_API_KEY")
+	asrPorxy := getFirstEnv("ASR_OPENAI_PROXY", "OPENAI_PROXY")
+	asrAIConfig = openai.DefaultConfig(asrAPIKey)
+	asrAIConfig.BaseURL = filterProxyUrl(asrPorxy)
+
+	chatAPIKey := getFirstEnv("CHAT_OPENAI_API_KEY", "OPENAI_API_KEY")
+	chatPorxy := getFirstEnv("CHAT_OPENAI_PROXY", "OPENAI_PROXY")
+	chatAIConfig = openai.DefaultConfig(chatAPIKey)
+	chatAIConfig.BaseURL = filterProxyUrl(chatPorxy)
+
+	ttsAPIKey := getFirstEnv("TTS_OPENAI_API_KEY", "OPENAI_API_KEY")
+	ttsPorxy := getFirstEnv("TTS_OPENAI_PROXY", "OPENAI_PROXY")
+	ttsAIConfig = openai.DefaultConfig(ttsAPIKey)
+	ttsAIConfig.BaseURL = filterProxyUrl(ttsPorxy)
+
+	logger.Tf(ctx, "OpenAI config, asr<key=%vB, proxy=%v, base=%v>, chat=<key=%vB, proxy=%v, base=%v>, tts=<key=%vB, proxy=%v, base=%v>",
+		len(asrAPIKey), asrPorxy, asrAIConfig.BaseURL,
+		len(chatAPIKey), chatPorxy, chatAIConfig.BaseURL,
+		len(ttsAPIKey), ttsPorxy, ttsAIConfig.BaseURL,
+	)
 }
 
 type openaiASRService struct {
@@ -62,7 +92,7 @@ func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, 
 		logger.Tf(ctx, "Convert audio %v to %v ok", inputFile, outputFile)
 	}
 
-	client := openai.NewClientWithConfig(aiConfig)
+	client := openai.NewClientWithConfig(asrAIConfig)
 	resp, err := client.CreateTranscription(
 		ctx,
 		openai.AudioRequest{
@@ -132,7 +162,7 @@ func (v *openaiChatService) RequestChat(ctx context.Context, rid string, stage *
 	logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, window=%v, histories=%v",
 		robot.uuid, robot.label, model, maxTokens, temperature, robot.chatWindow, len(stage.histories))
 
-	client := openai.NewClientWithConfig(aiConfig)
+	client := openai.NewClientWithConfig(chatAIConfig)
 	gptChatStream, err := client.CreateChatCompletionStream(
 		ctx, openai.ChatCompletionRequest{
 			Model:       model,
@@ -272,7 +302,7 @@ func NewOpenAITTSService() TTSService {
 func (v *openaiTTSService) RequestTTS(ctx context.Context, buildFilepath func(ext string) string, text string) error {
 	ttsFile := buildFilepath("aac")
 
-	client := openai.NewClientWithConfig(aiConfig)
+	client := openai.NewClientWithConfig(ttsAIConfig)
 	resp, err := client.CreateSpeech(ctx, openai.CreateSpeechRequest{
 		Model:          openai.SpeechModel(os.Getenv("AIT_TTS_MODEL")),
 		Input:          text,

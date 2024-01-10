@@ -111,6 +111,12 @@ Necessary environment variables that you must configure:
 Optionally, you might need to set the following environment variables:
 
 * `OPENAI_PROXY`: The OpenAI API proxy, default to `https://api.openai.com/v1`, which directly access OpenAI API without proxy.
+  * `ASR_OPENAI_API_KEY`: The OpenAI API key for ASR, default to `OPENAI_API_KEY`. 
+  * `ASR_OPENAI_PROXY`: The OpenAI API proxy for ASR, default to `OPENAI_PROXY`.
+  * `CHAT_OPENAI_API_KEY`: The OpenAI API key for chat, default to `OPENAI_API_KEY`.
+  * `CHAT_OPENAI_PROXY`: The OpenAI API proxy for chat, default to `OPENAI_PROXY`.
+  * `TTS_OPENAI_API_KEY`: The OpenAI API key for TTS, default to `OPENAI_API_KEY`.
+  * `TTS_OPENAI_PROXY`: The OpenAI API proxy for TTS, default to `OPENAI_PROXY`.
 * `AIT_SYSTEM_PROMPT`: The system prompt, default to `You are a helpful assistant.`.
   * To make sure AI response limit words to avoid long audio, we always append `Keep your reply neat, limiting the reply to ${AIT_REPLY_LIMIT} words.` to system prompt.
   * You can set `AIT_REPLY_LIMIT` to limit the words of AI response, default to `50`.

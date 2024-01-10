@@ -420,7 +420,7 @@ func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	})
 
 	talkServer.AddStage(stage)
-	logger.Tf(ctx, "Stage: Create new stage rid=%v, all=%v", stage.sid, talkServer.CountStage())
+	logger.Tf(ctx, "Stage: Create new stage sid=%v, all=%v", stage.sid, talkServer.CountStage())
 
 	go func() {
 		defer stage.Close()
@@ -543,6 +543,9 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 			if finished || newSentence {
 				stage.previousAssitant += sentence + " "
+				// We utilize user ASR and AI responses as prompts for the subsequent ASR, given that this is
+				// a chat-based scenario where the user converses with the AI, and the following audio should pertain to both user and AI text.
+				stage.previousAsrText += " " + sentence
 
 				if firstSentense {
 					firstSentense = false

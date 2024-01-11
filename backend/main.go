@@ -37,8 +37,13 @@ var robots []*Robot
 var asrService ASRService
 var ttsService TTSService
 
+type ASRResult struct {
+	Text     string
+	Duration time.Duration
+}
+
 type ASRService interface {
-	RequestASR(ctx context.Context, filepath, language, prompt string) (string, error)
+	RequestASR(ctx context.Context, filepath, language, prompt string) (*ASRResult, error)
 }
 
 type TTSService interface {
@@ -114,8 +119,14 @@ type Stage struct {
 	lastUploadAudio time.Time
 	// The time for last request ASR result.
 	lastRequestASR time.Time
+	// The last request ASR text.
+	lastRequestAsrText string
+	// The ASR duration of audio file.
+	lastAsrDuration time.Duration
 	// The time for last request Chat result, the first segment.
 	lastRequestChat time.Time
+	// The last response text of robot.
+	lastRobotFirstText string
 	// The time for last request TTS result, the first segment.
 	lastRequestTTS time.Time
 	// The time for last download the TTS result, the first segment.
@@ -580,12 +591,14 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 		// Do ASR, convert to text.
 		var asrText string
-		if respText, err := asrService.RequestASR(ctx, inputFile, robot.asrLanguage, stage.previousAsrText); err != nil {
+		if resp, err := asrService.RequestASR(ctx, inputFile, robot.asrLanguage, stage.previousAsrText); err != nil {
 			return errors.Wrapf(err, "transcription")
 		} else {
-			asrText = strings.TrimSpace(respText)
+			asrText = strings.TrimSpace(resp.Text)
 			stage.previousAsrText = asrText
 			stage.lastRequestASR = time.Now()
+			stage.lastAsrDuration = resp.Duration
+			stage.lastRequestAsrText = asrText
 		}
 		logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, prompt=<%v>, resp is <%v>",
 			robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, asrText)
@@ -626,8 +639,9 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 		// Do chat, get the response in stream.
 		chatService := &openaiChatService{
-			onFirstResponse: func(ctx context.Context) {
+			onFirstResponse: func(ctx context.Context, text string) {
 				stage.lastRequestChat = time.Now()
+				stage.lastRobotFirstText = text
 			},
 		}
 		if err := chatService.RequestChat(ctx, rid, stage, robot); err != nil {
@@ -753,8 +767,10 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 
 		if !segment.logged && segment.first {
 			stage.lastDownloadAudio = time.Now()
-			logger.Tf(ctx, "Report cost total=%.1fs, upload=%.1fs, asr=%.1fs, chat=%.1fs, tts=%.1fs, download=%.1fs",
-				stage.total(), stage.upload(), stage.asr(), stage.chat(), stage.tts(), stage.download())
+			speech := float64(stage.lastAsrDuration) / float64(time.Second)
+			logger.Tf(ctx, "Report cost total=%.1fs, steps=[upload=%.1fs,asr=%.1fs,chat=%.1fs,tts=%.1fs,download=%.1fs], ask=%v, speech=%.1fs, answer=%v",
+				stage.total(), stage.upload(), stage.asr(), stage.chat(), stage.tts(), stage.download(),
+				stage.lastRequestAsrText, speech, stage.lastRobotFirstText)
 		}
 
 		// Important trace log. Note that browser may request multiple times, so we only log for the first

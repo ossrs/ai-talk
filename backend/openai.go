@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	errors_std "errors"
 	"fmt"
 	"github.com/ossrs/go-oryx-lib/errors"
@@ -12,6 +13,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -72,7 +74,7 @@ func NewOpenAIASRService() ASRService {
 	return &openaiASRService{}
 }
 
-func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, prompt string) (string, error) {
+func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, prompt string) (*ASRResult, error) {
 	outputFile := fmt.Sprintf("%v.m4a", inputFile)
 
 	// Transcode input audio in opus or aac, to aac in m4a format.
@@ -87,11 +89,17 @@ func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, 
 		).Run()
 
 		if err != nil {
-			return "", errors.Errorf("Error converting the file")
+			return nil, errors.Errorf("Error converting the file")
 		}
 		logger.Tf(ctx, "Convert audio %v to %v ok", inputFile, outputFile)
 	}
 
+	duration, _, err := ffprobeAudio(ctx, outputFile)
+	if err != nil {
+		return nil, errors.Wrapf(err, "ffprobe")
+	}
+
+	// Request ASR.
 	client := openai.NewClientWithConfig(asrAIConfig)
 	resp, err := client.CreateTranscription(
 		ctx,
@@ -104,14 +112,65 @@ func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, 
 		},
 	)
 	if err != nil {
-		return "", errors.Wrapf(err, "asr")
+		return nil, errors.Wrapf(err, "asr")
 	}
 
-	return resp.Text, nil
+	return &ASRResult{Text: resp.Text, Duration: time.Duration(duration * float64(time.Second))}, nil
+}
+
+func ffprobeAudio(ctx context.Context, filename string) (duration float64, bitrate int, err error) {
+	args := []string{
+		"-show_error", "-show_private_data", "-v", "quiet", "-find_stream_info", "-print_format", "json",
+		"-show_format",
+	}
+	args = append(args, "-i", filename)
+
+	stdout, err := exec.CommandContext(ctx, "ffprobe", args...).Output()
+	if err != nil {
+		err = errors.Wrapf(err, "probe %v", filename)
+		return
+	}
+
+	type VLiveFileFormat struct {
+		Starttime string `json:"start_time"`
+		Duration  string `json:"duration"`
+		Bitrate   string `json:"bit_rate"`
+		Streams   int32  `json:"nb_streams"`
+		Score     int32  `json:"probe_score"`
+		HasVideo  bool   `json:"has_video"`
+		HasAudio  bool   `json:"has_audio"`
+	}
+
+	format := struct {
+		Format VLiveFileFormat `json:"format"`
+	}{}
+	if err = json.Unmarshal([]byte(stdout), &format); err != nil {
+		err = errors.Wrapf(err, "parse format %v", stdout)
+		return
+	}
+
+	var fv float64
+	if fv, err = strconv.ParseFloat(format.Format.Duration, 64); err != nil {
+		err = errors.Wrapf(err, "parse duration %v", format.Format.Duration)
+		return
+	} else {
+		duration = fv
+	}
+
+	var iv int64
+	if iv, err = strconv.ParseInt(format.Format.Bitrate, 10, 64); err != nil {
+		err = errors.Wrapf(err, "parse bitrate %v", format.Format.Bitrate)
+		return
+	} else {
+		bitrate = int(iv)
+	}
+
+	logger.Tf(ctx, "FFprobe input=%v, duration=%v, bitrate=%v", filename, duration, bitrate)
+	return
 }
 
 type openaiChatService struct {
-	onFirstResponse func(ctx context.Context)
+	onFirstResponse func(ctx context.Context, text string)
 }
 
 func (v *openaiChatService) RequestChat(ctx context.Context, rid string, stage *Stage, robot *Robot) error {
@@ -223,6 +282,7 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 					strings.ContainsRune(dc, '，') {
 					newSentence = true
 				}
+				//logger.Tf(ctx, "AI response: text=%v, new=%v", dc, newSentence)
 			}
 		}
 
@@ -243,7 +303,7 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 		if isEnglish(sentence) {
 			maxWords, minWords := 30, 3
 			if !firstSentense {
-				maxWords, minWords = 50, 10
+				maxWords, minWords = 50, 5
 			}
 
 			if nn := strings.Count(sentence, " "); nn >= maxWords {
@@ -254,7 +314,7 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 		} else {
 			maxWords, minWords := 50, 3
 			if !firstSentense {
-				maxWords, minWords = 100, 10
+				maxWords, minWords = 100, 5
 			}
 
 			if nn := utf8.RuneCount([]byte(sentence)); nn >= maxWords {
@@ -277,7 +337,7 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 					sentence = fmt.Sprintf("%v %v", robot.prefix, sentence)
 				}
 				if v.onFirstResponse != nil {
-					v.onFirstResponse(ctx)
+					v.onFirstResponse(ctx, sentence)
 				}
 			}
 

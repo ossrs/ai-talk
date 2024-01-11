@@ -45,7 +45,7 @@ func NewTencentASRService() ASRService {
 	return &tencentASRService{}
 }
 
-func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language, prompt string) (string, error) {
+func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language, prompt string) (*ASRResult, error) {
 	outputFile := fmt.Sprintf("%v.wav", inputFile)
 
 	// Transcode input audio in opus or aac, to aac in m4a format.
@@ -60,9 +60,14 @@ func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language,
 		).Run()
 
 		if err != nil {
-			return "", errors.Errorf("Error converting the file")
+			return nil, errors.Errorf("Error converting the file")
 		}
 		logger.Tf(ctx, "Convert audio %v to %v ok", inputFile, outputFile)
+	}
+
+	duration, _, err := ffprobeAudio(ctx, outputFile)
+	if err != nil {
+		return nil, errors.Wrapf(err, "ffprobe")
 	}
 
 	// Request ASR.
@@ -77,7 +82,7 @@ func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language,
 
 	data, err := ioutil.ReadFile(outputFile)
 	if err != nil {
-		return "", errors.Wrapf(err, "read wav file %v", outputFile)
+		return nil, errors.Wrapf(err, "read wav file %v", outputFile)
 	}
 
 	req := new(asr.FlashRecognitionRequest)
@@ -93,7 +98,7 @@ func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language,
 
 	resp, err := recognizer.Recognize(req, data)
 	if err != nil {
-		return "", errors.Wrapf(err, "recognize error")
+		return nil, errors.Wrapf(err, "recognize error")
 	}
 
 	var sb strings.Builder
@@ -102,7 +107,7 @@ func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language,
 		sb.WriteString(" ")
 	}
 
-	return strings.TrimSpace(sb.String()), nil
+	return &ASRResult{Text: strings.TrimSpace(sb.String()), Duration: time.Duration(duration * float64(time.Second))}, nil
 }
 
 type tencentTTSService struct {

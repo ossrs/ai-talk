@@ -218,8 +218,8 @@ func (v *openaiChatService) RequestChat(ctx context.Context, rid string, stage *
 	} else {
 		temperature = float32(v)
 	}
-	logger.Tf(ctx, "robot=%v(%v), AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, window=%v, histories=%v",
-		robot.uuid, robot.label, model, maxTokens, temperature, robot.chatWindow, len(stage.histories))
+	logger.Tf(ctx, "robot=%v(%v), OPENAI_PROXY: %v, AIT_CHAT_MODEL: %v, AIT_MAX_TOKENS: %v, AIT_TEMPERATURE: %v, window=%v, histories=%v",
+		robot.uuid, robot.label, chatAIConfig.BaseURL, model, maxTokens, temperature, robot.chatWindow, len(stage.histories))
 
 	client := openai.NewClientWithConfig(chatAIConfig)
 	gptChatStream, err := client.CreateChatCompletionStream(

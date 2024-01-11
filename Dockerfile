@@ -28,11 +28,12 @@ RUN echo "Before UPX for $TARGETARCH" && \
     echo "After UPX for $TARGETARCH" && \
     ls -lh /g/backend/server
 
-COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/
+COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
 
 RUN echo "Before UPX for $TARGETARCH" && \
     ls -lh /usr/local/bin/* && \
     upx --best --lzma /usr/local/bin/ffmpeg && \
+    upx --best --lzma /usr/local/bin/ffprobe && \
     echo "After UPX for $TARGETARCH" && \
     ls -lh /usr/local/bin/*
 
@@ -50,7 +51,7 @@ FROM ubuntu:focal as dist
 
  # lego: For ACME client, request and renew the HTTPS certificate.
 COPY --from=ffmpeg /etc/ssl/certs /etc/ssl/certs
-COPY --from=build /usr/local/bin/ffmpeg /usr/local/bin/
+COPY --from=build /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
 COPY --from=build /g/backend/*.aac /g/backend/*.mp3 /g/backend/*.opus /g/backend/server /g/backend/
 COPY --from=ui /g/build /g/build
 

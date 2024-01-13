@@ -6,6 +6,7 @@ export function useDebugPanel(playerRef) {
   const [showVerboseLogs, setShowVerboseLogs] = React.useState(false);
   const [verboseLogs, setVerboseLogs] = React.useState([]);
   const [infoLogs, setInfoLogs] = React.useState([]);
+  const [sharing, setSharing] = React.useState(false);
 
   // The refs, about the logs.
   const ref = React.useRef({
@@ -52,14 +53,18 @@ export function useDebugPanel(playerRef) {
         verbose(`Set debugging to ${!showVerboseLogs}`);
         setShowVerboseLogs(!showVerboseLogs);
       }}>{!showVerboseLogs ? 'Debug' : 'Quit debugging'}</button> &nbsp;
+      <button onClick={(e) => {
+        verbose(`Set sharing to ${!sharing}`);
+        setSharing(!sharing);
+      }}>{!sharing ? 'Share' : 'Quit sharing'}</button> &nbsp;
       {showVerboseLogs && <>
         <button onClick={(e) => {
           onClickWelcomeAudio();
         }}>Welcome audio</button> &nbsp;
-        <a href="https://github.com/ossrs/ai-talk/discussions" target='_blank'>Help me!</a>
+        <a href="https://github.com/ossrs/ai-talk/discussions" target='_blank' rel='noreferrer'>Help me!</a>
       </>}
     </div>
-    <div className='LogPanel'>
+    <div className={sharing ? 'LogPanelLong' : 'LogPanel'}>
       <div>
         {showVerboseLogs && verboseLogs.map((log, index) => {
           return (<div key={index}>{log}</div>);

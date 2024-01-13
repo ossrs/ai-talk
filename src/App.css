@@ -74,6 +74,15 @@
   margin-bottom: 25px;
 }
 
+.LogPanelLong {
+  text-align: left;
+  min-height: 78vh;
+  overflow: scroll;
+  height: 35vh;
+  padding: 10px 10px 0px 10px;
+  margin-bottom: 25px;
+}
+
 .SelectRobot, .SelectRobotDiv, .StartButton {
   font-size: 18px;
 }

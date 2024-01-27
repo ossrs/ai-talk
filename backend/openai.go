@@ -342,24 +342,29 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 	}
 
 	commitAISentence := func(sentence string, firstSentense bool) {
-		if sentence == "" {
+		filteredSentence := sentence
+		if strings.TrimSpace(sentence) == "" {
 			return
 		}
 
 		if firstSentense {
 			if robot.prefix != "" {
-				sentence = fmt.Sprintf("%v %v", robot.prefix, sentence)
+				filteredSentence = fmt.Sprintf("%v %v", robot.prefix, filteredSentence)
 			}
 			if v.onFirstResponse != nil {
-				v.onFirstResponse(ctx, sentence)
+				v.onFirstResponse(ctx, filteredSentence)
 			}
 		}
 
-		stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
+		segment := NewAnswerSegment(func(segment *AnswerSegment) {
 			segment.rid = rid
-			segment.text = sentence
+			segment.text = filteredSentence
 			segment.first = firstSentense
-		}))
+		})
+		stage.ttsWorker.SubmitSegment(ctx, stage, segment)
+
+		logger.Tf(ctx, "TTS: Commit segment rid=%v, asid=%v, first=%v, sentence is %v",
+			rid, segment.asid, firstSentense, filteredSentence)
 		return
 	}
 

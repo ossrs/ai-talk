@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -70,11 +71,15 @@ func openaiInit(ctx context.Context) {
 type openaiASRService struct {
 }
 
-func NewOpenAIASRService() ASRService {
-	return &openaiASRService{}
+func NewOpenAIASRService(opts ...func(service *openaiASRService)) ASRService {
+	v := &openaiASRService{}
+	for _, opt := range opts {
+		opt(v)
+	}
+	return v
 }
 
-func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, prompt string) (*ASRResult, error) {
+func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, prompt string, onBeforeRequest func()) (*ASRResult, error) {
 	outputFile := fmt.Sprintf("%v.m4a", inputFile)
 
 	// Transcode input audio in opus or aac, to aac in m4a format.
@@ -97,6 +102,10 @@ func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, 
 	duration, _, err := ffprobeAudio(ctx, outputFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "ffprobe")
+	}
+
+	if onBeforeRequest != nil {
+		onBeforeRequest()
 	}
 
 	// Request ASR.
@@ -252,43 +261,30 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 		stage.generating = false
 	}()
 
-	var sentence string
-	var finished bool
-	firstSentense := true
-	for !finished && ctx.Err() == nil {
-		response, err := gptChatStream.Recv()
-		finished = errors_std.Is(err, io.EOF)
+	filterAIResponse := func(response *openai.ChatCompletionStreamResponse, err error) (bool, string, error) {
+		finished := errors_std.Is(err, io.EOF)
 		if err != nil && !finished {
-			return errors.Wrapf(err, "recv chat")
+			return finished, "", errors.Wrapf(err, "recv chat")
 		}
 
+		if len(response.Choices) == 0 {
+			return finished, "", nil
+		}
+
+		choice := response.Choices[0]
+		dc := choice.Delta.Content
+		if dc == "" {
+			return finished, "", nil
+		}
+
+		filteredStencese := strings.ReplaceAll(dc, "\n\n", "\n")
+		filteredStencese = strings.ReplaceAll(filteredStencese, "\n", " ")
+
+		return finished, filteredStencese, nil
+	}
+
+	gotNewSentence := func(sentence, lastWords string, firstSentense bool) bool {
 		newSentence := false
-		if len(response.Choices) > 0 {
-			choice := response.Choices[0]
-			if dc := choice.Delta.Content; dc != "" {
-				filteredStencese := strings.ReplaceAll(dc, "\n\n", "\n")
-				filteredStencese = strings.ReplaceAll(filteredStencese, "\n", " ")
-				sentence += filteredStencese
-
-				// Any ASCII character to split sentence.
-				if strings.ContainsAny(dc, ",.?!\n") {
-					newSentence = true
-				}
-
-				// Any Chinese character to split sentence.
-				if strings.ContainsRune(dc, '。') ||
-					strings.ContainsRune(dc, '？') ||
-					strings.ContainsRune(dc, '！') ||
-					strings.ContainsRune(dc, '，') {
-					newSentence = true
-				}
-				//logger.Tf(ctx, "AI response: text=%v, new=%v", dc, newSentence)
-			}
-		}
-
-		if sentence == "" {
-			continue
-		}
 
 		isEnglish := func(s string) bool {
 			for _, r := range s {
@@ -299,10 +295,34 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 			return true
 		}
 
+		// Ignore empty.
+		if sentence == "" {
+			return newSentence
+		}
+
+		// Any ASCII character to split sentence.
+		if strings.ContainsAny(lastWords, ",.?!\n") {
+			newSentence = true
+		}
+
+		// Any Chinese character to split sentence.
+		if strings.ContainsRune(lastWords, '。') ||
+			strings.ContainsRune(lastWords, '？') ||
+			strings.ContainsRune(lastWords, '！') ||
+			strings.ContainsRune(lastWords, '，') {
+			newSentence = true
+		}
+
+		// Badcase, for number such as 1.3, or 1,300,000.
+		var badcase bool
+		if match, _ := regexp.MatchString(`\d+(\.|,)\d*$`, sentence); match {
+			badcase, newSentence = true, false
+		}
+
 		// Determine whether new sentence by length.
 		if isEnglish(sentence) {
 			maxWords, minWords := 30, 3
-			if !firstSentense {
+			if !firstSentense || badcase {
 				maxWords, minWords = 50, 5
 			}
 
@@ -313,7 +333,7 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 			}
 		} else {
 			maxWords, minWords := 50, 3
-			if !firstSentense {
+			if !firstSentense || badcase {
 				maxWords, minWords = 100, 5
 			}
 
@@ -324,30 +344,56 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 			}
 		}
 
-		if finished || newSentence {
-			stage.previousAssitant += sentence + " "
-			// We utilize user ASR and AI responses as prompts for the subsequent ASR, given that this is
-			// a chat-based scenario where the user converses with the AI, and the following audio should pertain to both user and AI text.
-			stage.previousAsrText += " " + sentence
+		return newSentence
+	}
 
-			isFirstSentence := firstSentense
-			if firstSentense {
-				firstSentense = false
-				if robot.prefix != "" {
-					sentence = fmt.Sprintf("%v %v", robot.prefix, sentence)
-				}
-				if v.onFirstResponse != nil {
-					v.onFirstResponse(ctx, sentence)
-				}
-			}
-
-			stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
-				segment.rid = rid
-				segment.text = sentence
-				segment.first = isFirstSentence
-			}))
-			sentence = ""
+	commitAISentence := func(sentence string, firstSentense bool) {
+		if sentence == "" {
+			return
 		}
+
+		if firstSentense {
+			if robot.prefix != "" {
+				sentence = fmt.Sprintf("%v %v", robot.prefix, sentence)
+			}
+			if v.onFirstResponse != nil {
+				v.onFirstResponse(ctx, sentence)
+			}
+		}
+
+		stage.ttsWorker.SubmitSegment(ctx, stage, NewAnswerSegment(func(segment *AnswerSegment) {
+			segment.rid = rid
+			segment.text = sentence
+			segment.first = firstSentense
+		}))
+		return
+	}
+
+	var sentence, lastWords string
+	isFinished, firstSentense := false, true
+	for !isFinished && ctx.Err() == nil {
+		response, err := gptChatStream.Recv()
+		if finished, words, err := filterAIResponse(&response, err); err != nil {
+			return errors.Wrapf(err, "filter")
+		} else {
+			isFinished, sentence, lastWords = finished, sentence+words, words
+		}
+		logger.Tf(ctx, "AI response: text=%v plus %v", lastWords, sentence)
+
+		newSentence := gotNewSentence(sentence, lastWords, firstSentense)
+		if !isFinished && !newSentence {
+			continue
+		}
+
+		// Use the sentence for prompt and logging.
+		stage.previousAssitant += sentence + " "
+		// We utilize user ASR and AI responses as prompts for the subsequent ASR, given that this is
+		// a chat-based scenario where the user converses with the AI, and the following audio should pertain to both user and AI text.
+		stage.previousAsrText += " " + sentence
+		// Commit the sentense to TTS worker and callbacks.
+		commitAISentence(sentence, firstSentense)
+		// Reset the sentence, because we have committed it.
+		sentence, firstSentense = "", false
 	}
 
 	return nil

@@ -45,7 +45,7 @@ func NewTencentASRService() ASRService {
 	return &tencentASRService{}
 }
 
-func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language, prompt string) (*ASRResult, error) {
+func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language, prompt string, onBeforeRequest func()) (*ASRResult, error) {
 	outputFile := fmt.Sprintf("%v.wav", inputFile)
 
 	// Transcode input audio in opus or aac, to aac in m4a format.
@@ -68,6 +68,10 @@ func (v *tencentASRService) RequestASR(ctx context.Context, inputFile, language,
 	duration, _, err := ffprobeAudio(ctx, outputFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "ffprobe")
+	}
+
+	if onBeforeRequest != nil {
+		onBeforeRequest()
 	}
 
 	// Request ASR.

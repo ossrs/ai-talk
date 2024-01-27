@@ -43,7 +43,7 @@ type ASRResult struct {
 }
 
 type ASRService interface {
-	RequestASR(ctx context.Context, filepath, language, prompt string) (*ASRResult, error)
+	RequestASR(ctx context.Context, filepath, language, prompt string, onBeforeRequest func()) (*ASRResult, error)
 }
 
 type TTSService interface {
@@ -117,6 +117,8 @@ type Stage struct {
 	lastSentence time.Time
 	// The time for last upload audio.
 	lastUploadAudio time.Time
+	// The time for last extract audio for ASR.
+	lastExtractAudio time.Time
 	// The time for last request ASR result.
 	lastRequestASR time.Time
 	// The last request ASR text.
@@ -183,9 +185,16 @@ func (v *Stage) upload() float64 {
 	return 0
 }
 
+func (v *Stage) exta() float64 {
+	if v.lastExtractAudio.After(v.lastUploadAudio) {
+		return float64(v.lastExtractAudio.Sub(v.lastUploadAudio)) / float64(time.Second)
+	}
+	return 0
+}
+
 func (v *Stage) asr() float64 {
-	if v.lastRequestASR.After(v.lastUploadAudio) {
-		return float64(v.lastRequestASR.Sub(v.lastUploadAudio)) / float64(time.Second)
+	if v.lastRequestASR.After(v.lastExtractAudio) {
+		return float64(v.lastRequestASR.Sub(v.lastExtractAudio)) / float64(time.Second)
 	}
 	return 0
 }
@@ -591,7 +600,9 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 		// Do ASR, convert to text.
 		var asrText string
-		if resp, err := asrService.RequestASR(ctx, inputFile, robot.asrLanguage, stage.previousAsrText); err != nil {
+		if resp, err := asrService.RequestASR(ctx, inputFile, robot.asrLanguage, stage.previousAsrText, func() {
+			stage.lastExtractAudio = time.Now()
+		}); err != nil {
 			return errors.Wrapf(err, "transcription")
 		} else {
 			asrText = strings.TrimSpace(resp.Text)
@@ -768,8 +779,8 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 		if !segment.logged && segment.first {
 			stage.lastDownloadAudio = time.Now()
 			speech := float64(stage.lastAsrDuration) / float64(time.Second)
-			logger.Tf(ctx, "Report cost total=%.1fs, steps=[upload=%.1fs,asr=%.1fs,chat=%.1fs,tts=%.1fs,download=%.1fs], ask=%v, speech=%.1fs, answer=%v",
-				stage.total(), stage.upload(), stage.asr(), stage.chat(), stage.tts(), stage.download(),
+			logger.Tf(ctx, "Elapsed cost total=%.1fs, steps=[upload=%.1fs,exta=%.1fs,asr=%.1fs,chat=%.1fs,tts=%.1fs,download=%.1fs], ask=%v, speech=%.1fs, answer=%v",
+				stage.total(), stage.upload(), stage.exta(), stage.asr(), stage.chat(), stage.tts(), stage.download(),
 				stage.lastRequestAsrText, speech, stage.lastRobotFirstText)
 		}
 

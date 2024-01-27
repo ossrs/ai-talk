@@ -108,7 +108,8 @@ func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, 
 		openai.AudioRequest{
 			Model:    os.Getenv("AIT_ASR_MODEL"),
 			FilePath: outputFile,
-			Format:   openai.AudioResponseFormatJSON,
+			// Note that must use verbose JSON, to get the duration of file.
+			Format:   openai.AudioResponseFormatVerboseJSON,
 			Language: language,
 			Prompt:   prompt,
 		},

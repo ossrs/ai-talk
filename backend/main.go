@@ -529,6 +529,27 @@ func handleStageStart(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
+func handleStartConversation(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	// The stage uuid, user must create it before upload question audio.
+	q := r.URL.Query()
+	sid := q.Get("sid")
+	if sid == "" {
+		return errors.Errorf("empty sid")
+	}
+
+	stage := talkServer.QueryStage(sid)
+	if stage == nil {
+		return errors.Errorf("invalid sid %v", sid)
+	}
+
+	// Keep alive the stage.
+	stage.KeepAlive()
+	stage.lastSentence = time.Now()
+
+	ohttp.WriteData(ctx, w, r, nil)
+	return nil
+}
+
 // When user ask a question, which is a request with audio, which is identified by rid (request id).
 func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	// The stage uuid, user must create it before upload question audio.
@@ -545,7 +566,6 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 
 	// Keep alive the stage.
 	stage.KeepAlive()
-	stage.lastSentence = time.Now()
 	// Switch to the context of stage.
 	ctx = stage.loggingCtx
 
@@ -611,8 +631,8 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 			stage.lastAsrDuration = resp.Duration
 			stage.lastRequestAsrText = asrText
 		}
-		logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, prompt=<%v>, resp is <%v>",
-			robot.uuid, robot.label, robot.asrLanguage, stage.previousAsrText, asrText)
+		logger.Tf(ctx, "ASR ok, robot=%v(%v), lang=%v, speech=%v, prompt=<%v>, resp is <%v>",
+			robot.uuid, robot.label, robot.asrLanguage, stage.lastAsrDuration, stage.previousAsrText, asrText)
 
 		// Important trace log.
 		logger.Tf(ctx, "You: %v", asrText)
@@ -925,6 +945,13 @@ func doMain(ctx context.Context) error {
 	handler.HandleFunc("/api/ai-talk/start/", func(w http.ResponseWriter, r *http.Request) {
 		if err := handleStageStart(ctx, w, r); err != nil {
 			logger.Ef(ctx, "Handle start failed, err %+v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	handler.HandleFunc("/api/ai-talk/conversation/", func(w http.ResponseWriter, r *http.Request) {
+		if err := handleStartConversation(ctx, w, r); err != nil {
+			logger.Ef(ctx, "Handle audio failed, err %+v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})

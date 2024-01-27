@@ -98,6 +98,18 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
     if (!robotReady) return;
 
     const processUserInput = async(userMayInput) => {
+      // End conversation, for stat the elapsed time cost accurately.
+      await new Promise((resolve, reject) => {
+        fetch(`/api/ai-talk/conversation/?sid=${stageUUID}&robot=${robot.uuid}&umi=${userMayInput}`, {
+          method: 'POST',
+        }).then(response => {
+          return response.json();
+        }).then((data) => {
+          verbose(`TTS: Conversation started`);
+          resolve();
+        }).catch(error => reject(error));
+      });
+
       // Upload the user input audio to the server.
       const requestUUID = await new Promise((resolve, reject) => {
         verbose(`ASR: Uploading ${ref.current.audioChunks.length} chunks, robot=${robot.uuid}`);

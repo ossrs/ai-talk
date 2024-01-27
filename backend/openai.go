@@ -372,7 +372,7 @@ func (v *openaiChatService) handle(ctx context.Context, stage *Stage, robot *Rob
 		} else {
 			isFinished, sentence, lastWords = finished, sentence+words, words
 		}
-		logger.Tf(ctx, "AI response: text=%v plus %v", lastWords, sentence)
+		//logger.Tf(ctx, "AI response: text=%v plus %v", lastWords, sentence)
 
 		newSentence := gotNewSentence(sentence, lastWords, firstSentense)
 		if !isFinished && !newSentence {

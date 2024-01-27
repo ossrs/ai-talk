@@ -218,5 +218,6 @@ The changelog:
 * Support share logging text mode. v1.0.38
 * Fix some badcase for sentence determine. [v1.0.39](https://github.com/ossrs/ai-talk/releases/tag/v1.0.39)
 * Speed up the ASR, without transcode. v1.0.40
+* Refine the stat for elapsed time cost of upload. v1.0.41
 
 Winlin, 2023.12

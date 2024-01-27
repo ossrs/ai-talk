@@ -213,5 +213,10 @@ The changelog:
 * Allow user retry when error. v1.0.34
 * Refine badcase for user input. v1.0.35
 * Fix bug for setting window for robot. [v1.0.36](https://github.com/ossrs/ai-talk/releases/tag/v1.0.36)
+* Support setup API proxy and key for ASR,Chat,TTS. v1.0.37
+* Support Tencent Speech to speed up. v1.0.37
+* Support share logging text mode. v1.0.38
+* Fix some badcase for sentence determine. [v1.0.39](https://github.com/ossrs/ai-talk/releases/tag/v1.0.39)
+* Speed up the ASR, without transcode. v1.0.40
 
 Winlin, 2023.12

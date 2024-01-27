@@ -80,29 +80,22 @@ func NewOpenAIASRService(opts ...func(service *openaiASRService)) ASRService {
 }
 
 func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, prompt string, onBeforeRequest func()) (*ASRResult, error) {
-	outputFile := fmt.Sprintf("%v.m4a", inputFile)
-
-	// Transcode input audio in opus or aac, to aac in m4a format.
+	outputFile := fmt.Sprintf("%v.mp4", inputFile)
 	if os.Getenv("AIT_KEEP_FILES") != "true" {
 		defer os.Remove(outputFile)
 	}
-	if true {
-		err := exec.CommandContext(ctx, "ffmpeg",
-			"-i", inputFile,
-			"-vn", "-c:a", "aac", "-ac", "1", "-ar", "16000", "-ab", "50k",
-			outputFile,
-		).Run()
 
-		if err != nil {
-			return nil, errors.Errorf("Error converting the file")
-		}
-		logger.Tf(ctx, "Convert audio %v to %v ok", inputFile, outputFile)
+	// Transcode input audio in opus or aac, to aac in m4a format.
+	// If need to encode to aac, use:
+	//		"-c:a", "aac", "-ac", "1", "-ar", "16000", "-ab", "30k",
+	if err := exec.CommandContext(ctx, "ffmpeg",
+		"-i", inputFile,
+		"-vn", "-c:a", "copy",
+		outputFile,
+	).Run(); err != nil {
+		return nil, errors.Errorf("Error converting the file")
 	}
-
-	duration, _, err := ffprobeAudio(ctx, outputFile)
-	if err != nil {
-		return nil, errors.Wrapf(err, "ffprobe")
-	}
+	logger.Tf(ctx, "Convert audio %v to %v ok", inputFile, outputFile)
 
 	if onBeforeRequest != nil {
 		onBeforeRequest()
@@ -124,7 +117,7 @@ func (v *openaiASRService) RequestASR(ctx context.Context, inputFile, language, 
 		return nil, errors.Wrapf(err, "asr")
 	}
 
-	return &ASRResult{Text: resp.Text, Duration: time.Duration(duration * float64(time.Second))}, nil
+	return &ASRResult{Text: resp.Text, Duration: time.Duration(resp.Duration * float64(time.Second))}, nil
 }
 
 func ffprobeAudio(ctx context.Context, filename string) (duration float64, bitrate int, err error) {

@@ -264,6 +264,14 @@ func NewAnswerSegment(opts ...func(segment *AnswerSegment)) *AnswerSegment {
 type TalkServer struct {
 	// All stages created by user.
 	stages []*Stage
+
+	// Total conversations.
+	conversations uint64
+	// Total errors.
+	errors uint64
+	// Total badcases.
+	badcases uint64
+
 	// The lock to protect fields.
 	lock sync.Mutex
 }
@@ -276,6 +284,27 @@ func NewTalkServer() *TalkServer {
 
 func (v *TalkServer) Close() error {
 	return nil
+}
+
+func (v *TalkServer) NewBadcase() {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	v.badcases++
+}
+
+func (v *TalkServer) NewError() {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	v.errors++
+}
+
+func (v *TalkServer) NewConversation() {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	v.conversations++
 }
 
 func (v *TalkServer) AddStage(stage *Stage) {
@@ -546,6 +575,8 @@ func handleStartConversation(ctx context.Context, w http.ResponseWriter, r *http
 	stage.KeepAlive()
 	stage.lastSentence = time.Now()
 
+	talkServer.NewConversation()
+
 	ohttp.WriteData(ctx, w, r, nil)
 	return nil
 }
@@ -638,25 +669,32 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		logger.Tf(ctx, "You: %v", asrText)
 
 		// Detect empty input and filter badcase.
-		if asrText == "" {
-			return errors.Errorf("empty asr")
-		}
-		if robot.asrLanguage == "zh" {
-			if strings.Contains(asrText, "请不吝点赞") ||
-				strings.Contains(asrText, "支持明镜与点点栏目") ||
-				strings.Contains(asrText, "谢谢观看") ||
-				strings.Contains(asrText, "請不吝點贊") ||
-				strings.Contains(asrText, "支持明鏡與點點欄目") {
-				return errors.Errorf("badcase: %v", asrText)
+		if err := func() error {
+			if asrText == "" {
+				return errors.Errorf("empty asr")
 			}
-			if strings.Contains(asrText, "字幕由") && strings.Contains(asrText, "社群提供") {
-				return errors.Errorf("badcase: %v", asrText)
+			if robot.asrLanguage == "zh" {
+				if strings.Contains(asrText, "请不吝点赞") ||
+					strings.Contains(asrText, "支持明镜与点点栏目") ||
+					strings.Contains(asrText, "谢谢观看") ||
+					strings.Contains(asrText, "請不吝點贊") ||
+					strings.Contains(asrText, "支持明鏡與點點欄目") {
+					return errors.Errorf("badcase: %v", asrText)
+				}
+				if strings.Contains(asrText, "字幕由") && strings.Contains(asrText, "社群提供") {
+					return errors.Errorf("badcase: %v", asrText)
+				}
+			} else if robot.asrLanguage == "en" {
+				if strings.ToLower(asrText) == "you" ||
+					strings.Count(asrText, ".") == len(asrText) {
+					return errors.Errorf("badcase: %v", asrText)
+				}
 			}
-		} else if robot.asrLanguage == "en" {
-			if strings.ToLower(asrText) == "you" ||
-				strings.Count(asrText, ".") == len(asrText) {
-				return errors.Errorf("badcase: %v", asrText)
-			}
+
+			return nil
+		}(); err != nil {
+			talkServer.NewBadcase()
+			return err
 		}
 
 		// Keep alive the stage.
@@ -689,6 +727,7 @@ func handleUploadQuestionAudio(ctx context.Context, w http.ResponseWriter, r *ht
 		})
 		return nil
 	}(); err != nil {
+		talkServer.NewError()
 		logger.Wf(ctx, "Stage: Upload err %v", err.Error())
 		return err
 	}
@@ -749,6 +788,7 @@ func handleQueryQuestionState(ctx context.Context, w http.ResponseWriter, r *htt
 		})
 		return nil
 	}(); err != nil {
+		talkServer.NewError()
 		logger.Wf(ctx, "Stage: Query err %v", err.Error())
 		return err
 	}
@@ -821,6 +861,7 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 
 		return nil
 	}(); err != nil {
+		talkServer.NewError()
 		logger.Wf(ctx, "Stage: Query err %v", err.Error())
 		return err
 	}
@@ -876,6 +917,7 @@ func handleRemoveAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http.R
 		ohttp.WriteData(ctx, w, r, nil)
 		return nil
 	}(); err != nil {
+		talkServer.NewError()
 		logger.Wf(ctx, "Stage: Query err %v", err.Error())
 		return err
 	}
@@ -937,6 +979,14 @@ func doMain(ctx context.Context) error {
 		sig := <-sigs
 		logger.Tf(ctx, "Got signal %v", sig)
 		cancel()
+	}()
+
+	go func() {
+		for {
+			logger.Tf(ctx, "Timer: Current stages=%v, chats=%v, errors=%v, badcases=%v",
+				talkServer.CountStage(), talkServer.conversations, talkServer.errors, talkServer.badcases)
+			time.Sleep(10 * time.Second)
+		}
 	}()
 
 	// HTTP API handlers.

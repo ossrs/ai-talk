@@ -833,7 +833,7 @@ func handleDownloadAnswerTTS(ctx context.Context, w http.ResponseWriter, r *http
 		if segment == nil {
 			return errors.Errorf("no segment for %v %v", rid, asid)
 		}
-		logger.Tf(ctx, "Query segment %v %v, dummy=%v, segment=%v, err=%v",
+		logger.Tf(ctx, "Query segment rid=%v, asid=%v, dummy=%v, segment=%v, err=%v",
 			rid, asid, segment.dummy, segment.text, segment.err)
 
 		if !segment.logged && segment.first {
@@ -1300,7 +1300,7 @@ func doConfig(ctx context.Context) error {
 		setEnvDefault(fmt.Sprintf("AIT_ROBOT_%v_REPLY_PREFIX", i), os.Getenv("AIT_REPLY_PREFIX"))
 
 		voice := "hello-english.aac"
-		if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)) != "en" {
+		if os.Getenv(fmt.Sprintf("AIT_ROBOT_%v_ASR_LANGUAGE", i)) == "zh" {
 			voice = "hello-chinese.aac"
 		}
 

@@ -27,7 +27,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
     const isLo = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isHttps = window.location.protocol === 'https:';
     const securityAllowed = isLo || isHttps;
-    securityAllowed || info(`App started, allowed=${securityAllowed}`);
+    securityAllowed || info('sys', `App started, allowed=${securityAllowed}`);
     securityAllowed || alert(`HTTPS is required!`);
     verbose(`App started, allowed=${securityAllowed}, lo=${isLo}, https=${isHttps}`);
     if (!securityAllowed) return;
@@ -91,7 +91,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
         const robot = data.data.robots.find(robot => robot.uuid === config.uuid);
         if (robot) {
           setPreviewRobot(robot);
-          info(`Use robot ${robot.label}`);
+          info('sys', `Use robot ${robot.label}`);
           verbose(`Use previous robot ${robot.label} ${robot.uuid}`);
         }
       }
@@ -111,12 +111,12 @@ export function useRobotInitiator(info, verbose, playerRef) {
       playerRef.current.removeEventListener('ended', listener);
 
       setRobotReady(true);
-      info(`Conversation started, AI is ready`);
+      info('sys', `Conversation started, AI is ready`);
       verbose(`Stage started, AI is ready, sid=${stageUUID}`);
     };
     playerRef.current.addEventListener('ended', listener);
 
-    info(''); // Insert a empty line to show loading the resource.
+    info('sys', ''); // Insert a empty line to show loading the resource.
     playerRef.current.src = `/api/ai-talk/examples/${previewRobot.voice}?sid=${stageUUID}`;
     playerRef.current.play().catch(error => alert(`Play error: ${error}`));
   }, [info, verbose, playerRef, setStageRobot, previewRobot, stageUUID, robotReady]);
@@ -128,7 +128,7 @@ export function useRobotInitiator(info, verbose, playerRef) {
     const robot = availableRobots.find(robot => robot.uuid === e.target.value);
     setPreviewRobot(robot);
     RobotConfig.save(robot);
-    info(`Change robot to ${robot.label}`);
+    info('sys', `Change robot to ${robot.label}`);
     verbose(`Change to robot ${robot.label} ${robot.uuid}`);
   }, [info, verbose, availableRobots, setPreviewRobot]);
 

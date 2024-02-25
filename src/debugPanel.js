@@ -15,9 +15,17 @@ export function useDebugPanel(playerRef) {
   });
 
   // Write a summary or info log, which is important but short message for user.
-  const info = React.useCallback((msg) => {
+  const info = React.useCallback((label, msg) => {
     console.log(`[info] ${buildLog(msg)}`);
-    ref.current.infoLogs = [...ref.current.infoLogs, msg];
+
+    const last = ref.current.infoLogs.length > 0 ? ref.current.infoLogs[ref.current.infoLogs.length - 1] : null;
+    if (last && last.label === label && last.msg && msg) {
+      last.msg = `${last.msg} ${msg}`;
+      ref.current.infoLogs = [...ref.current.infoLogs];
+    } else {
+      ref.current.infoLogs = [...ref.current.infoLogs, {label, msg}];
+    }
+
     setInfoLogs(ref.current.infoLogs);
   }, [ref, setInfoLogs]);
 
@@ -70,12 +78,13 @@ export function useDebugPanel(playerRef) {
           return (<div key={index}>{log}</div>);
         })}
         {!showVerboseLogs && infoLogs.map((log, index) => {
-          const you = log.indexOf('You:') === 0;
-          const bot = log.indexOf('Bot:') === 0;
+          const you = log.label === 'user';
+          const bot = log.label === 'bot';
           const color = you ? 'darkgreen' : (bot ? 'darkblue' : '');
           const fontWeight = you ? 'bold' : 'normal';
-          const msg = log ? log : index === infoLogs.length - 1 ? <div><br/><b>Loading...</b></div> : <br/>;
-          return (<div key={index} style={{color,fontWeight}}>{msg}</div>);
+          const msg = log.msg ? log.msg : index === infoLogs.length - 1 ? <div><br/><b>Loading...</b></div> : <br/>;
+          const prefix = log.msg && log.label ? `${{'sys':'System', 'user':'You', 'bot':'Bot'}[log.label]}: ` : '';
+          return (<div key={index} style={{color,fontWeight}}>{prefix}{msg}</div>);
         })}
       </div>
       <div style={{ float:"left", clear: "both" }} ref={logPanelRef}/>

@@ -127,7 +127,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
           return response.json();
         }).then((data) => {
           verbose(`ASR: Upload success: ${data.data.rid} ${data.data.asr}`);
-          info(`You: ${data.data.asr}`);
+          info('user', `${data.data.asr}`);
           resolve(data.data.rid);
         }).catch((error) => reject(error));
       });
@@ -145,7 +145,7 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
             }).then((data) => {
               if (data?.data?.asid) {
                 verbose(`TTS: Audio ready: ${data.data.asid} ${data.data.tts}`);
-                info(`Bot: ${data.data.tts}`);
+                info('bot', `${data.data.tts}`);
               }
               resolve(data.data);
             }).catch(error => reject(error));
@@ -221,21 +221,21 @@ function AppImpl({info, verbose, robot, robotReady, stageUUID, playerRef}) {
           ref.current.mediaRecorder.stop();
         });
 
-        info(''); // Insert a empty line to show loading of user input.
+        info('user', ''); // Insert a empty line to show loading of user input.
         setTalking(false);
         setMicWorking(false);
         setProcessing(true);
         verbose(`Event: Recoder stopped, chunks=${ref.current.audioChunks.length}`);
 
         if (userMayInput < durationRequiredUserInput) {
-          info(`System: You didn't say anything!`);
+          info('sys', `System: You didn't say anything!`);
           alert(`Warning: You didn't say anything!`);
         } else {
           try {
             await processUserInput(userMayInput);
           } catch (e) {
-            info(`System: Server error ${e}`);
-            info(`System: Please try again.`);
+            info('sys', `System: Server error ${e}`);
+            info('sys', `System: Please try again.`);
             alert(`System: Server error ${e}`);
           }
         }

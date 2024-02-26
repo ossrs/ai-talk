@@ -50,21 +50,24 @@ func openaiInit(ctx context.Context) {
 	asrPorxy := getFirstEnv("ASR_OPENAI_PROXY", "OPENAI_PROXY")
 	asrAIConfig = openai.DefaultConfig(asrAPIKey)
 	asrAIConfig.BaseURL = filterProxyUrl(asrPorxy)
+	asrAIConfig.OrgID = os.Getenv("OPENAI_ORGANIZATION")
 
 	chatAPIKey := getFirstEnv("CHAT_OPENAI_API_KEY", "OPENAI_API_KEY")
 	chatPorxy := getFirstEnv("CHAT_OPENAI_PROXY", "OPENAI_PROXY")
 	chatAIConfig = openai.DefaultConfig(chatAPIKey)
 	chatAIConfig.BaseURL = filterProxyUrl(chatPorxy)
+	chatAIConfig.OrgID = os.Getenv("OPENAI_ORGANIZATION")
 
 	ttsAPIKey := getFirstEnv("TTS_OPENAI_API_KEY", "OPENAI_API_KEY")
 	ttsPorxy := getFirstEnv("TTS_OPENAI_PROXY", "OPENAI_PROXY")
 	ttsAIConfig = openai.DefaultConfig(ttsAPIKey)
 	ttsAIConfig.BaseURL = filterProxyUrl(ttsPorxy)
+	ttsAIConfig.OrgID = os.Getenv("OPENAI_ORGANIZATION")
 
-	logger.Tf(ctx, "OpenAI config, asr<key=%vB, proxy=%v, base=%v>, chat=<key=%vB, proxy=%v, base=%v>, tts=<key=%vB, proxy=%v, base=%v>",
-		len(asrAPIKey), asrPorxy, asrAIConfig.BaseURL,
-		len(chatAPIKey), chatPorxy, chatAIConfig.BaseURL,
-		len(ttsAPIKey), ttsPorxy, ttsAIConfig.BaseURL,
+	logger.Tf(ctx, "OpenAI config, asr<key=%vB, proxy=%v, base=%v, org=%v>, chat=<key=%vB, proxy=%v, base=%v, org=%v>, tts=<key=%vB, proxy=%v, base=%v, org=%v>",
+		len(asrAPIKey), asrPorxy, asrAIConfig.BaseURL, asrAIConfig.OrgID,
+		len(chatAPIKey), chatPorxy, chatAIConfig.BaseURL, chatAIConfig.OrgID,
+		len(ttsAPIKey), ttsPorxy, ttsAIConfig.BaseURL, ttsAIConfig.OrgID,
 	)
 }
 

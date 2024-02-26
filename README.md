@@ -111,6 +111,7 @@ Necessary environment variables that you must configure:
 Optionally, you might need to set the following environment variables:
 
 * `OPENAI_PROXY`: The OpenAI API proxy, default to `https://api.openai.com/v1`, which directly access OpenAI API without proxy.
+  * `OPENAI_ORGANIZATION`: The OpenAI organization.
   * `ASR_OPENAI_API_KEY`: The OpenAI API key for ASR, default to `OPENAI_API_KEY`. 
   * `ASR_OPENAI_PROXY`: The OpenAI API proxy for ASR, default to `OPENAI_PROXY`.
   * `CHAT_OPENAI_API_KEY`: The OpenAI API key for chat, default to `OPENAI_API_KEY`.
@@ -219,5 +220,7 @@ The changelog:
 * Fix some badcase for sentence determine. [v1.0.39](https://github.com/ossrs/ai-talk/releases/tag/v1.0.39)
 * Speed up the ASR, without transcode. v1.0.40
 * Refine the stat for elapsed time cost of upload. v1.0.41
+* Refine the log label. [v1.0.46](https://github.com/ossrs/ai-talk/releases/tag/v1.0.46)
+* Support OpenAI organization. v1.0.47
 
 Winlin, 2023.12

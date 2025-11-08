@@ -1,5 +1,7 @@
 # AI Talk
 
+No long need this project, as there are too many AI chat bots.
+
 [![](https://badgen.net/discord/members/q29TwKwC2C)](https://discord.gg/q29TwKwC2C)
 
 AI-Talk allows you to talk with OpenAI GPT.
